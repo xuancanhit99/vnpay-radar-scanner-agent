@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
+Add-Type -AssemblyName System.Security
 
 $serviceName = "VNPAYRadarScannerAgent"
 $installingUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -41,7 +42,11 @@ function Read-DotEnv([string]$Path) {
 
 $package = (Resolve-Path -LiteralPath $PackageDirectory).Path
 $sourceConfig = (Resolve-Path -LiteralPath $ConfigFile).Path
-$coreExecutable = Join-Path $package "radar-scanner-agent.exe"
+$coreExecutable = Join-Path $package "agent\radar-scanner-agent.exe"
+$usesNestedPackage = Test-Path -LiteralPath $coreExecutable
+if (-not (Test-Path -LiteralPath $coreExecutable)) {
+    $coreExecutable = Join-Path $package "radar-scanner-agent.exe"
+}
 $wrapperSource = Join-Path $package "$serviceName.exe"
 if (-not (Test-Path -LiteralPath $coreExecutable)) { throw "Missing $coreExecutable" }
 if (-not (Test-Path -LiteralPath $wrapperSource)) { throw "Missing $wrapperSource" }
@@ -65,11 +70,33 @@ if ($existingService) {
     }
 }
 
+if ($usesNestedPackage) {
+    $legacyExecutable = Join-Path $InstallDirectory "radar-scanner-agent.exe"
+    $legacyRuntime = Join-Path $InstallDirectory "_internal"
+    if (Test-Path -LiteralPath $legacyExecutable) {
+        Remove-Item -LiteralPath $legacyExecutable -Force
+    }
+    if (Test-Path -LiteralPath $legacyRuntime) {
+        Remove-Item -LiteralPath $legacyRuntime -Recurse -Force
+    }
+}
+
 New-Item -ItemType Directory -Path $InstallDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $DataDirectory -Force | Out-Null
 $logDirectory = Join-Path $DataDirectory "logs"
 New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
-Copy-Item -Path (Join-Path $package "*") -Destination $InstallDirectory -Recurse -Force
+$resolvedInstallDirectory = [IO.Path]::GetFullPath($InstallDirectory).TrimEnd('\')
+if ($package.TrimEnd('\') -ne $resolvedInstallDirectory) {
+    Copy-Item -Path (Join-Path $package "*") -Destination $InstallDirectory -Recurse -Force
+}
+
+$installedAgentExecutable = Join-Path $InstallDirectory "agent\radar-scanner-agent.exe"
+if (-not (Test-Path -LiteralPath $installedAgentExecutable)) {
+    $installedAgentExecutable = Join-Path $InstallDirectory "radar-scanner-agent.exe"
+}
+if (-not (Test-Path -LiteralPath $installedAgentExecutable)) {
+    throw "Installed Agent executable was not found."
+}
 
 $secretFile = Join-Path $DataDirectory "client-secret.dpapi"
 $secretBytes = [Text.Encoding]::UTF8.GetBytes($clientSecret)
@@ -106,7 +133,7 @@ $xml = @"
   <id>$serviceName</id>
   <name>VNPAY RADAR Scanner Agent</name>
   <description>Pulls APK scan jobs from VNPAY RADAR and executes them through the local APK Scanner.</description>
-  <executable>%BASE%\radar-scanner-agent.exe</executable>
+  <executable>$([Security.SecurityElement]::Escape($installedAgentExecutable))</executable>
   <workingdirectory>$escapedDataDirectory</workingdirectory>
   <startmode>Automatic</startmode>
   <delayedAutoStart>true</delayedAutoStart>

@@ -29,7 +29,21 @@ Required Keycloak client configuration:
 Local state defaults to `C:\ProgramData\VNPAY\RadarScannerAgent\agent.db`. SQLite is only an
 outbox for results awaiting delivery; PostgreSQL in RADAR remains the source of truth.
 
-## Build and install the Windows Service
+## Scanner Manager
+
+`radar-scanner-manager.exe` is the Windows control application for the Agent. It provides:
+
+- Service status and Start, Stop, Restart controls.
+- Secure configuration backed by Windows DPAPI.
+- SSO, RADAR, APK Scanner, and Android device diagnostics.
+- Service log viewing.
+- Direct process mode for development and short-lived lab testing.
+
+Direct process mode is blocked while the Windows Service is running so one machine cannot
+claim jobs twice. Keep the Manager open or minimized while using direct process mode; closing it
+stops that process after confirmation.
+
+## Build and install
 
 Build the signed-input, unsigned-output development package from PowerShell:
 
@@ -37,10 +51,31 @@ Build the signed-input, unsigned-output development package from PowerShell:
 .\packaging\build.ps1
 ```
 
-The build runs tests and Ruff, creates a PyInstaller `onedir` bundle, downloads pinned WinSW
-`v2.12.0`, verifies its SHA-256 checksum, and writes the ZIP to `packaging/output/`.
+The build runs tests and Ruff, creates the worker and Manager with PyInstaller, downloads pinned
+WinSW `v2.12.0`, verifies its SHA-256 checksum, and writes two artifacts to
+`packaging/output/`:
 
-Open PowerShell as Administrator and install from the unzipped package or build directory:
+- `VNPAYRadarScannerAgent-Portable-<version>-x64.zip`
+- `VNPAYRadarScannerAgent-Setup-<version>-x64.exe`
+
+The Setup executable is built with NSIS. The release artifacts are unsigned development builds
+until a VNPAY code-signing certificate is configured in CI.
+
+### Setup executable
+
+Run Setup as an administrator, then open **RADAR Scanner Manager**. Enter the machine-specific
+configuration and select **Install / upgrade**. The service starts after the Manager stores the
+secret with machine-scoped DPAPI.
+
+### Portable package
+
+Extract the ZIP and run `radar-scanner-manager.exe`. Save the configuration, then select
+**Run directly**. Portable configuration is stored under the current user's Local AppData and
+uses current-user DPAPI.
+
+### Manual service installation
+
+Open PowerShell as Administrator and install from the unzipped portable package:
 
 ```powershell
 .\install-service.ps1 -ConfigFile C:\path\to\vnpay-radar-scanner-agent\.env

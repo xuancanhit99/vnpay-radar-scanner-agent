@@ -2,6 +2,7 @@ import ctypes
 import os
 from ctypes import wintypes
 from pathlib import Path
+from typing import Literal
 
 
 class _DataBlob(ctypes.Structure):
@@ -19,7 +20,12 @@ def _require_windows() -> None:
         raise RuntimeError("DPAPI secret storage is only available on Windows")
 
 
-def _transform(data: bytes, *, protect: bool) -> bytes:
+def _transform(
+    data: bytes,
+    *,
+    protect: bool,
+    scope: Literal["machine", "user"] = "machine",
+) -> bytes:
     _require_windows()
     if not data:
         raise ValueError("Secret payload must not be empty")
@@ -43,7 +49,7 @@ def _transform(data: bytes, *, protect: bool) -> bytes:
             None,
             None,
             None,
-            _CRYPTPROTECT_LOCAL_MACHINE,
+            _CRYPTPROTECT_LOCAL_MACHINE if scope == "machine" else 0,
             ctypes.byref(output_blob),
         )
     else:
@@ -67,8 +73,13 @@ def _transform(data: bytes, *, protect: bool) -> bytes:
         kernel32.LocalFree(output_blob.pbData)
 
 
-def protect_secret(secret: str, destination: Path) -> None:
-    protected = _transform(secret.encode("utf-8"), protect=True)
+def protect_secret(
+    secret: str,
+    destination: Path,
+    *,
+    scope: Literal["machine", "user"] = "machine",
+) -> None:
+    protected = _transform(secret.encode("utf-8"), protect=True, scope=scope)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(protected)
 

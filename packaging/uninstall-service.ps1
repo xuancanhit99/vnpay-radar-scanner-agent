@@ -2,6 +2,7 @@
 param(
     [string]$InstallDirectory = "$env:ProgramFiles\VNPAY\Radar Scanner Agent",
     [string]$DataDirectory = "$env:ProgramData\VNPAY\RadarScannerAgent",
+    [switch]$KeepProgramFiles,
     [switch]$RemoveData
 )
 
@@ -26,7 +27,7 @@ if ($service -and (Test-Path -LiteralPath $wrapper)) {
     if ($LASTEXITCODE -ne 0) { throw "WinSW service uninstall failed." }
 }
 
-if (Test-Path -LiteralPath $InstallDirectory) {
+if (-not $KeepProgramFiles -and (Test-Path -LiteralPath $InstallDirectory)) {
     Remove-Item -LiteralPath $InstallDirectory -Recurse -Force
 }
 if ($RemoveData -and (Test-Path -LiteralPath $DataDirectory)) {
