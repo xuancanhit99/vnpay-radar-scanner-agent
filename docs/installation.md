@@ -94,10 +94,11 @@ Quá trình khởi động khỏe mạnh có request thành công tới:
 
 Chạy file Setup phiên bản mới hơn với quyền Administrator. Khi service đã tồn tại, Setup sẽ:
 
-1. Phát hiện và dừng service.
-2. Thay thế các file chương trình.
-3. Giữ nguyên cấu hình, DPAPI secret, log và SQLite outbox trong `ProgramData`.
-4. Khởi động lại service.
+1. Đóng các process Scanner Manager đang mở để giải phóng file thực thi.
+2. Phát hiện và dừng service.
+3. Thay thế các file chương trình.
+4. Giữ nguyên cấu hình, DPAPI secret, log và SQLite outbox trong `ProgramData`.
+5. Khởi động lại service.
 
 Sau mỗi lần nâng cấp, kiểm tra phiên bản/trạng thái heartbeat của service và chạy Diagnostics
 trong Manager. Không xóa `agent.db` khi có thể vẫn còn kết quả đang chờ gửi.

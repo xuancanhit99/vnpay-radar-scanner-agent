@@ -187,7 +187,7 @@ uv lock
 4. Xác nhận file ZIP portable chứa `.env.example`, Manager, Worker, WinSW và các script.
 5. Xác nhận package không chứa `.env`, file DPAPI, cơ sở dữ liệu, log hoặc secret thật.
 6. Kiểm thử cài mới bằng Setup trên một máy Windows sạch.
-7. Kiểm thử nâng cấp tại chỗ bằng Setup khi service đang chạy.
+7. Kiểm thử nâng cấp tại chỗ bằng Setup khi service và Scanner Manager đang chạy.
 8. Xác nhận service trở lại trạng thái `Running` và giữ nguyên dữ liệu trong ProgramData.
 9. Chạy toàn bộ Diagnostics của Manager trên môi trường mục tiêu.
 10. Chạy kiểm thử end-to-end có kiểm soát cho từng capability được quảng bá.

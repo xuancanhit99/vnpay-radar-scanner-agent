@@ -6,10 +6,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.3.0"
+  !define APP_VERSION "0.3.1"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.3.0.0"
+  !define APP_FILE_VERSION "0.3.1.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -55,6 +55,11 @@ SetCompressor /SOLID lzma
 
 Section "RADAR Scanner Agent" SEC_MAIN
   SetShellVarContext all
+  nsExec::ExecToStack 'taskkill.exe /IM "radar-scanner-manager.exe" /T /F'
+  Pop $0
+  Pop $1
+  Sleep 1000
+
   StrCpy $R9 "0"
   nsExec::ExecToStack 'sc.exe query "${SERVICE_NAME}"'
   Pop $0

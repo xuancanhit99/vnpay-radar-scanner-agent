@@ -77,7 +77,7 @@ kết quả scanner.
 | Cùng một máy xuất hiện hai lần | Agent ID khác nhau hoặc service và worker trực tiếp cùng chạy | Dừng tiến trình trùng và chỉ giữ một Agent ID ổn định. |
 | Không thấy kết quả trên RADAR | Backend không khả dụng; kết quả có thể vẫn nằm trong SQLite outbox | Khôi phục kết nối RADAR và giữ nguyên `agent.db`; Agent sẽ thử gửi lại trước khi nhận việc mới. |
 | Lỗi lease lặp lại | Độ trễ Backend/lỗi mạng hoặc chu kỳ gia hạn quá dài | Kiểm tra kết nối RADAR và so sánh chu kỳ gia hạn với thời hạn lease từ Backend. |
-| Setup không thể thay thế file | Service/tiến trình hiện tại vẫn đang giữ file thực thi | Dùng Setup mới nhất để tự động dừng/khởi động lại service; đóng các cửa sổ Manager đang mở. |
+| Setup không thể thay thế file | Service/tiến trình hiện tại vẫn đang giữ file thực thi | Dùng Setup 0.3.1 trở lên để tự động đóng Manager và dừng/khởi động lại service. |
 
 ## Kiểm tra thiết bị trước khi chạy
 
