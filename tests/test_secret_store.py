@@ -37,3 +37,9 @@ def test_plaintext_secret_remains_available_for_console_mode() -> None:
     settings = AgentSettings(client_secret="console-secret", client_secret_file=None)
 
     assert settings.resolved_client_secret() == "console-secret"
+
+
+def test_empty_secret_file_environment_value_is_not_current_directory() -> None:
+    settings = AgentSettings(_env_file=None, client_secret_file="")
+
+    assert settings.client_secret_file is None

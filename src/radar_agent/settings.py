@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from radar_agent.secret_store import unprotect_secret
@@ -15,8 +15,8 @@ class AgentSettings(BaseSettings):
     )
 
     base_url: str = "https://radar.vnpay.dev"
-    id: str = Field(default="windows-canhvx-01", pattern=r"^[A-Za-z0-9._-]+$")
-    display_name: str = "Windows Scanner 01"
+    id: str = Field(default="windows-lab-01", pattern=r"^[A-Za-z0-9._-]+$")
+    display_name: str = "Windows Lab 01"
     scanner_url: str = "http://127.0.0.1:8000"
     token_url: str = (
         "https://idsafe.vnpaytest.vn/realms/VNPAY-TEST/protocol/openid-connect/token"
@@ -24,13 +24,20 @@ class AgentSettings(BaseSettings):
     client_id: str = "vnpay-radar-agent"
     client_secret: str = ""
     client_secret_file: Path | None = None
-    device_model: str = "Xiaomi 13"
+    device_model: str = "Android Device"
     database_path: Path = Path("./agent.db")
     verify_tls: bool = True
     poll_wait_seconds: int = Field(default=20, ge=0, le=25)
     lease_renew_interval_seconds: int = Field(default=15, ge=5, le=30)
     scanner_timeout_seconds: int = Field(default=400, ge=30, le=900)
     retry_delay_seconds: int = Field(default=5, ge=1, le=60)
+
+    @field_validator("client_secret_file", mode="before")
+    @classmethod
+    def normalize_empty_secret_file(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     def resolved_client_secret(self) -> str:
         if self.client_secret:
