@@ -1,117 +1,99 @@
 # VNPAY RADAR Scanner Agent
 
-Windows edge worker that pulls APK scan jobs from RADAR and delegates them to the local
-`apk-scan-api`. The MVP supports `TC-MOBI-3` and one concurrent job.
+Worker biên chạy trên Windows dành cho VNPAY RADAR. Agent chủ động lấy các job quét APK từ
+RADAR Backend, giao việc thực thi cho `apk-scan-api` cục bộ và gửi kết quả về qua HTTPS.
 
-## Run in console
+Phiên bản hiện tại hỗ trợ chạy một job tại một thời điểm và capability `TC-MOBI-3`.
 
-1. Start Docker Desktop and `apk-scan-api` on `127.0.0.1:8000`.
-2. Connect and authorize the Android device with ADB.
-3. Copy `.env.example` to `.env` and set the service-account client secret.
-4. Run:
+## Mô hình triển khai
+
+```mermaid
+flowchart LR
+    User["Người dùng RADAR"] --> Web["RADAR Web"]
+    Web --> Backend["RADAR Backend"]
+    Agent["Scanner Agent<br/>Windows Service"] -->|"HTTPS 443 chiều đi"| Backend
+    Agent -->|"Client Credentials"| SSO["VNPAY SSO"]
+    Agent -->|"HTTP localhost"| Scanner["APK Scanner API"]
+    Scanner -->|"ADB / USB"| Device["Thiết bị Android hoặc emulator"]
+```
+
+Máy Windows không cần IP public hoặc quy tắc firewall cho chiều kết nối vào. Agent chủ động
+khởi tạo toàn bộ kết nối tới các dịch vụ từ xa.
+
+## Thành phần
+
+- **Scanner Agent**: worker chạy nền, thực hiện báo cáo trạng thái, nhận job, gia hạn lease,
+  chạy quét và gửi kết quả.
+- **Scanner Manager**: ứng dụng desktop Windows để cấu hình, quản lý service, chẩn đoán và xem log.
+- **SQLite outbox**: hàng đợi bền vững cục bộ dành cho kết quả chưa gửi được. PostgreSQL của RADAR
+  vẫn là nguồn dữ liệu chính thức.
+- **Windows Service wrapper**: WinSW chạy Agent dưới tài khoản `LocalSystem`, tự động khởi động
+  có độ trễ và tự khởi động lại khi gặp lỗi.
+
+## Bắt đầu nhanh
+
+### Cài đặt bằng bộ Setup
+
+1. Khởi động APK Scanner cục bộ tại `http://127.0.0.1:8000`.
+2. Kết nối thiết bị Android đã được cấp quyền hoặc khởi động emulator.
+3. Chạy `VNPAYRadarScannerAgent-Setup-<version>-x64.exe` với quyền Administrator.
+4. Mở **RADAR Scanner Manager** và nhập các giá trị phù hợp với môi trường.
+5. Chọn **Install / upgrade**, sau đó chạy toàn bộ kiểm tra trong tab **Diagnostics**.
+
+Xem [Hướng dẫn cài đặt](docs/installation.md) để biết các điều kiện tiên quyết, cấu hình
+Keycloak, chế độ portable, quy trình nâng cấp và gỡ cài đặt.
+
+### Chạy từ mã nguồn
 
 ```powershell
-uv sync
+Copy-Item .env.example .env
+# Thiết lập RADAR_AGENT_CLIENT_SECRET trong .env trước khi chạy.
+uv sync --group dev
 uv run radar-scanner-agent
 ```
 
-Console mode accepts the client secret from local environment configuration. The Windows
-Service installer removes the plaintext secret from the installed `.env` and stores it in a
-machine-scoped DPAPI file that is readable only by LocalSystem and local Administrators.
+Không commit `.env`, file DPAPI, cơ sở dữ liệu SQLite, log hoặc artifact được sinh ra khi build.
 
-Required Keycloak client configuration:
+## Cấu hình định danh bắt buộc
 
-- Client ID `vnpay-radar-agent`, confidential client.
-- Service account enabled; Standard, Implicit, and Direct Access Grants disabled.
-- Client role `scanner-agent` assigned to the client's own service-account user.
-- No `call-vnpay-sso-spi-service` or HR-sync role is required.
+Tích hợp mặc định trên môi trường test sử dụng một service account Keycloak riêng:
 
-Local state defaults to `C:\ProgramData\VNPAY\RadarScannerAgent\agent.db`. SQLite is only an
-outbox for results awaiting delivery; PostgreSQL in RADAR remains the source of truth.
+- Client ID: `vnpay-radar-agent`
+- Loại client: confidential
+- Service accounts: bật
+- Standard Flow, Implicit Flow và Direct Access Grants: tắt
+- Client role gán cho chính service-account user của client: `scanner-agent`
 
-## Scanner Manager
+Agent không cần role partner, SPI hoặc HR-sync của VNPAY SSO.
 
-`radar-scanner-manager.exe` is the Windows control application for the Agent. It provides:
+## Tài liệu
 
-- Service status and Start, Stop, Restart controls.
-- Secure configuration backed by Windows DPAPI.
-- SSO, RADAR, APK Scanner, and Android device diagnostics.
-- Service log viewing.
-- Direct process mode for development and short-lived lab testing.
+- [Kiến trúc và vòng đời job](docs/architecture.md)
+- [Cài đặt và nâng cấp](docs/installation.md)
+- [Tham chiếu cấu hình](docs/configuration.md)
+- [Vận hành và xử lý sự cố](docs/operations.md)
+- [Phát triển và phát hành](docs/development.md)
 
-Direct process mode is blocked while the Windows Service is running so one machine cannot
-claim jobs twice. Keep the Manager open or minimized while using direct process mode; closing it
-stops that process after confirmation.
+## Kiểm tra khi phát triển
 
-## Build and install
+```powershell
+uv sync --group dev
+uv run ruff check src tests
+uv run pytest -q
+```
 
-Build the signed-input, unsigned-output development package from PowerShell:
+Build bộ Setup cho Windows và file ZIP portable:
 
 ```powershell
 .\packaging\build.ps1
 ```
 
-The build runs tests and Ruff, creates the worker and Manager with PyInstaller, downloads pinned
-WinSW `v2.12.0`, verifies its SHA-256 checksum, and writes two artifacts to
-`packaging/output/`:
+Artifact được ghi vào `packaging/output/`. Artifact dành cho phát triển hiện chưa được ký số;
+bản phát hành production phải được ký Authenticode trong CI.
 
-- `VNPAYRadarScannerAgent-Portable-<version>-x64.zip`
-- `VNPAYRadarScannerAgent-Setup-<version>-x64.exe`
+## Dự án liên quan
 
-The Setup executable is built with NSIS. The release artifacts are unsigned development builds
-until a VNPAY code-signing certificate is configured in CI.
-
-### Setup executable
-
-Run Setup as an administrator, then open **RADAR Scanner Manager**. Enter the machine-specific
-configuration and select **Install / upgrade**. The service starts after the Manager stores the
-secret with machine-scoped DPAPI.
-
-### Portable package
-
-Extract the ZIP and run `radar-scanner-manager.exe`. Save the configuration, then select
-**Run directly**. Portable configuration is stored under the current user's Local AppData and
-uses current-user DPAPI.
-
-### Manual service installation
-
-Open PowerShell as Administrator and install from the unzipped portable package:
-
-```powershell
-.\install-service.ps1 -ConfigFile C:\path\to\vnpay-radar-scanner-agent\.env
-```
-
-Installed paths:
-
-- Program: `C:\Program Files\VNPAY\Radar Scanner Agent`
-- Config/state: `C:\ProgramData\VNPAY\RadarScannerAgent`
-- Logs: `C:\ProgramData\VNPAY\RadarScannerAgent\logs`
-- Service: `VNPAYRadarScannerAgent` with delayed automatic start and restart-on-failure
-
-The installing Windows user receives read-only access to the log directory. The DPAPI secret
-file and SQLite outbox remain restricted to LocalSystem and local Administrators.
-
-Operational checks:
-
-```powershell
-Get-Service VNPAYRadarScannerAgent
-Restart-Service VNPAYRadarScannerAgent
-Get-Content C:\ProgramData\VNPAY\RadarScannerAgent\logs\VNPAYRadarScannerAgent.err.log -Tail 100
-```
-
-The service runs as `LocalSystem`. The APK Scanner must continue listening only on
-`127.0.0.1:8000`; Docker Desktop or the local Docker engine must be running for jobs to execute.
-
-## API contract
-
-The RADAR backend owns the scanner API contract:
-
-- `POST /internal/scanner/agents/heartbeat`
-- `POST /internal/scanner/jobs/claim`
-- `POST /internal/scanner/jobs/{job_id}/start`
-- `POST /internal/scanner/jobs/{job_id}/lease`
-- `POST /internal/scanner/jobs/{job_id}/result`
-
-Backend implementation and database migrations remain in
+Backend API, database migration, giao diện quản lý scanner job và các quy tắc phân quyền thuộc
+trách nhiệm của
 [`vnpay-radar-platform`](https://git.vnpay.vn/ansp/application-security/vnpay-radar-platform).
-Agent and backend versions must be contract-tested together before release.
+Các thay đổi ở Agent và Backend phải được kiểm thử contract cùng nhau trước khi phát hành.

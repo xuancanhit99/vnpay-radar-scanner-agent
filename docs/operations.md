@@ -1,0 +1,132 @@
+# Vận hành và xử lý sự cố
+
+## Trạng thái vận hành bình thường
+
+Trạng thái ổn định được kỳ vọng:
+
+- Windows Service `VNPAYRadarScannerAgent`: `Running`, kiểu khởi động `Automatic`.
+- Trạng thái scanner: `ready` hoặc tạm thời `busy`.
+- Trạng thái thiết bị: `connected` với ADB serial ổn định.
+- Request lấy SSO token: HTTP `200`.
+- Request heartbeat và claim tới RADAR: HTTP `200`.
+- Số dòng pending trong `agent.db` không tăng liên tục.
+
+Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics kiểm tra theo thứ tự:
+
+1. Client Credentials của VNPAY SSO.
+2. APK Scanner `/health`.
+3. APK Scanner `/device` và quyền của thiết bị Android.
+4. Heartbeat có xác thực tới RADAR.
+
+Chạy Diagnostics sẽ gửi một heartbeat thật nhưng không nhận hoặc thực thi scan job.
+
+## Kiểm tra bằng dòng lệnh
+
+```powershell
+Get-Service VNPAYRadarScannerAgent
+
+Get-Content `
+  C:\ProgramData\VNPAY\RadarScannerAgent\logs\VNPAYRadarScannerAgent.err.log `
+  -Tail 100
+```
+
+Điều khiển service yêu cầu cửa sổ PowerShell có quyền Administrator:
+
+```powershell
+Restart-Service VNPAYRadarScannerAgent
+(Get-Service VNPAYRadarScannerAgent).WaitForStatus(
+  'Running',
+  [TimeSpan]::FromSeconds(30)
+)
+```
+
+## Đọc hiểu log
+
+Agent ghi log có cấu trúc JSON và WinSW thực hiện log rotation. Các thông báo quan trọng:
+
+| Thông báo hoặc request | Ý nghĩa |
+| --- | --- |
+| `Scanner agent started` | Đã tải thành công cấu hình và DPAPI secret. |
+| `GET .../health 200` | Có thể kết nối tới APK Scanner cục bộ. |
+| `GET .../device 200` | Device endpoint đã phản hồi; xem heartbeat để biết trạng thái connected/disconnected. |
+| `POST .../token 200` | Keycloak Client Credentials hợp lệ. |
+| `POST .../heartbeat 200` | RADAR đã chấp nhận định danh và trạng thái Agent. |
+| `POST .../claim ... 200` | Long poll kết thúc bình thường; phản hồi rỗng nghĩa là không có job trong hàng đợi. |
+| `Claimed scanner job` | Agent đã nhận một job và lease token. |
+| `Delivered scanner result` | RADAR đã chấp nhận kết quả và dòng outbox đã bị xóa. |
+| `Scanner agent loop failed` | Vòng lặp hiện tại gặp lỗi và sẽ thử lại sau khoảng chờ đã cấu hình. |
+
+Không đính kèm `.env`, `client-secret.dpapi` hoặc `agent.db` vào ticket hỗ trợ. Trước tiên,
+cung cấp các file log đã rotate và che access token hoặc dữ liệu nhạy cảm không mong muốn trong
+kết quả scanner.
+
+## Ma trận xử lý sự cố
+
+| Hiện tượng | Nguyên nhân có thể | Cách xử lý |
+| --- | --- | --- |
+| Service chưa được cài đặt | Manager chưa hoàn tất **Install / upgrade** | Lưu cấu hình, cài service với quyền Administrator rồi chạy lại Diagnostics. |
+| Service khởi động rồi dừng | Thiếu/sai cấu hình, lỗi truy cập DPAPI hoặc giá trị vi phạm ràng buộc | Đọc service error log mới nhất; kiểm tra các đường dẫn trong ProgramData và cài lại bằng Manager. |
+| SSO trả `401` / `invalid_client` | Sai Client ID/secret, client bị tắt hoặc secret đã luân chuyển | Kiểm tra `vnpay-radar-agent`, cập nhật secret qua Manager rồi cài đặt/nâng cấp lại. |
+| RADAR trả `401` | Token hết hạn/không hợp lệ hoặc issuer không khớp | Xác nhận RADAR URL và realm của token cùng môi trường; Agent sẽ thử lại một lần với token mới. |
+| RADAR trả `403` | Service account thiếu role `scanner-agent` | Gán client role này cho chính service-account user của client. |
+| APK Scanner không khả dụng | Container/tiến trình đã dừng hoặc Scanner URL sai | Khởi động APK Scanner và kiểm tra `http://127.0.0.1:8000/health`. |
+| Thiết bị bị ngắt kết nối | USB debugging bị tắt, chưa chấp nhận RSA, lỗi cáp/driver hoặc emulator offline | Kiểm tra APK Scanner `/device` và `adb devices`; kết nối lại và chấp nhận RSA authorization. |
+| Job giữ trạng thái queued | Agent offline, capability không khớp hoặc không có Agent đủ điều kiện | Kiểm tra thời điểm heartbeat, `capabilities`, trạng thái scanner/thiết bị và testcase của job. |
+| Cùng một máy xuất hiện hai lần | Agent ID khác nhau hoặc service và worker trực tiếp cùng chạy | Dừng tiến trình trùng và chỉ giữ một Agent ID ổn định. |
+| Không thấy kết quả trên RADAR | Backend không khả dụng; kết quả có thể vẫn nằm trong SQLite outbox | Khôi phục kết nối RADAR và giữ nguyên `agent.db`; Agent sẽ thử gửi lại trước khi nhận việc mới. |
+| Lỗi lease lặp lại | Độ trễ Backend/lỗi mạng hoặc chu kỳ gia hạn quá dài | Kiểm tra kết nối RADAR và so sánh chu kỳ gia hạn với thời hạn lease từ Backend. |
+| Setup không thể thay thế file | Service/tiến trình hiện tại vẫn đang giữ file thực thi | Dùng Setup mới nhất để tự động dừng/khởi động lại service; đóng các cửa sổ Manager đang mở. |
+
+## Kiểm tra thiết bị trước khi chạy
+
+Trước khi tạo job thật:
+
+1. Xác nhận chỉ có đúng một thiết bị mục tiêu đang online.
+2. Xác nhận package mục tiêu đã được cài.
+3. Xác nhận APK Scanner báo `ready`.
+4. Chạy Diagnostics trong Manager.
+5. Gửi một job `TC-MOBI-3` và theo dõi toàn bộ vòng đời.
+
+Không kiểm thử trên thiết bị cá nhân hoặc tài khoản ứng dụng cá nhân, trừ khi kế hoạch kiểm thử
+cho phép rõ ràng.
+
+## Khôi phục outbox
+
+Outbox bảo vệ kết quả đã hoàn thành trong thời gian RADAR tạm thời gián đoạn. Khi khôi phục:
+
+- Không xóa hoặc thay thế `agent.db`.
+- Không đổi Agent ID trừ khi có chỉ dẫn từ người phụ trách Backend.
+- Khôi phục kết nối SSO/RADAR và khởi động lại service nếu cần.
+- Chờ thông báo `Delivered scanner result` trước khi tạo thêm job.
+
+Không có quy trình chỉnh sửa SQL thủ công được hỗ trợ. Chuyển tiếp trường hợp cơ sở dữ liệu hỏng
+hoặc kết quả bị từ chối vĩnh viễn cho người phụ trách RADAR Backend, kèm log đã loại bỏ dữ liệu
+nhạy cảm và job ID bị ảnh hưởng.
+
+## Xử lý khi secret bị lộ
+
+1. Vô hiệu hóa hoặc luân chuyển Keycloak client secret ngay lập tức.
+2. Dừng Agent nếu Agent đang gửi lưu lượng trái phép hoặc bất thường.
+3. Kiểm tra event của Keycloak client và hoạt động Agent trên RADAR.
+4. Cài secret mới qua Manager.
+5. Chạy Diagnostics và một bài quét có kiểm soát.
+6. Xóa các bản secret bị lộ khỏi ticket hoặc chat nếu nền tảng hỗ trợ, nhưng không coi việc xóa
+   là biện pháp thay thế cho luân chuyển secret.
+
+## Kiểm tra sau nâng cấp
+
+Sau khi Setup hoàn tất:
+
+1. Xác nhận service có trạng thái `Running`.
+2. Xác nhận heartbeat tiếp theo trên RADAR hiển thị đúng phiên bản.
+3. Xác nhận trạng thái scanner/thiết bị khỏe mạnh.
+4. Xác nhận request token, heartbeat và claim trả về `200`.
+5. Chạy một testcase có kiểm soát khi bản phát hành thay đổi cơ chế thực thi job hoặc ánh xạ
+   payload.
+
+## Giới hạn vận hành đã biết
+
+- Mỗi thời điểm chỉ chạy một job.
+- Chỉ quảng bá capability `TC-MOBI-3`.
+- Agent ghi nhận yêu cầu hủy khi gia hạn lease nhưng chưa ngắt request HTTP cục bộ đang chạy.
+- Bản build phát triển chưa được ký số cho tới khi bổ sung code signing vào CI.
