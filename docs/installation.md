@@ -34,8 +34,9 @@ tin nhắn, ticket, ảnh chụp màn hình, repository hoặc gói log.
 
 ## Cách cài đặt khuyến nghị: file Setup
 
-1. Nhận file `VNPAYRadarScannerAgent-Setup-<version>-x64.exe` và checksum SHA-256 từ kênh
-   phát hành đã được phê duyệt.
+1. Tải file `VNPAYRadarScannerAgent-Setup-<version>-x64.exe` và file `SHA256SUMS` từ
+   [GitHub Releases](https://github.com/xuancanhit99/vnpay-radar-scanner-agent/releases)
+   hoặc kênh phát hành nội bộ đã được phê duyệt.
 2. Kiểm tra checksum trước khi chạy.
 3. Chạy Setup với quyền Administrator.
 4. Mở **RADAR Scanner Manager** từ menu Start hoặc shortcut trên desktop.

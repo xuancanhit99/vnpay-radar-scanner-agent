@@ -5,6 +5,9 @@ RADAR Backend, giao việc thực thi cho `apk-scan-api` cục bộ và gửi k�
 
 Phiên bản hiện tại hỗ trợ chạy một job tại một thời điểm và capability `TC-MOBI-3`.
 
+Phiên bản phát hành dùng Semantic Versioning. Có thể kiểm tra phiên bản tại tab **Overview**
+của Scanner Manager, heartbeat trên RADAR, hoặc mục Apps & features của Windows.
+
 ## Mô hình triển khai
 
 ```mermaid
@@ -22,8 +25,8 @@ khởi tạo toàn bộ kết nối tới các dịch vụ từ xa.
 
 ## Thành phần
 
-- **Scanner Agent**: worker chạy nền, thực hiện báo cáo trạng thái, nhận job, gia hạn lease,
-  chạy quét và gửi kết quả.
+- **Scanner Agent**: worker chạy nền, gửi heartbeat độc lập, nhận job, gia hạn lease, chạy quét
+  và gửi kết quả.
 - **Scanner Manager**: ứng dụng desktop Windows để cấu hình, quản lý service, chẩn đoán và xem log.
 - **SQLite outbox**: hàng đợi bền vững cục bộ dành cho kết quả chưa gửi được. PostgreSQL của RADAR
   vẫn là nguồn dữ liệu chính thức.
@@ -88,8 +91,11 @@ Build bộ Setup cho Windows và file ZIP portable:
 .\packaging\build.ps1
 ```
 
-Artifact được ghi vào `packaging/output/`. Artifact dành cho phát triển hiện chưa được ký số;
-bản phát hành production phải được ký Authenticode trong CI.
+Artifact được ghi vào `packaging/output/`, gồm bộ Setup, ZIP portable và file checksum
+`SHA256SUMS`. Bản phát hành được công bố tại
+[GitHub Releases](https://github.com/xuancanhit99/vnpay-radar-scanner-agent/releases).
+Artifact dành cho phát triển hiện chưa được ký số; bản phát hành production phải được ký
+Authenticode trong CI.
 
 ## Dự án liên quan
 

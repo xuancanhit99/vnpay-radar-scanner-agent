@@ -81,6 +81,7 @@ uv run pytest -q
 Các khu vực kiểm thử quan trọng:
 
 - cache token và làm mới một lần sau phản hồi `401`
+- heartbeat độc lập với long polling và quá trình chạy scan
 - vòng đời job và gia hạn lease
 - độ bền outbox và thứ tự gửi kết quả
 - ánh xạ phản hồi từ scanner
@@ -147,8 +148,13 @@ Kết quả:
 ```text
 packaging/output/
 |-- VNPAYRadarScannerAgent-Portable-<version>-x64.zip
-`-- VNPAYRadarScannerAgent-Setup-<version>-x64.exe
+|-- VNPAYRadarScannerAgent-Setup-<version>-x64.exe
+`-- VNPAYRadarScannerAgent-<version>-SHA256SUMS.txt
 ```
+
+Mỗi lần build sẽ xóa các artifact Agent phiên bản cũ trong `packaging/output/` để tránh chọn
+nhầm file khi phát hành. Worker, Manager và Setup đều được gắn version metadata của ứng dụng;
+WinSW service wrapper giữ version riêng của WinSW.
 
 Các tùy chọn build hữu ích:
 
@@ -186,7 +192,9 @@ uv lock
 9. Chạy toàn bộ Diagnostics của Manager trên môi trường mục tiêu.
 10. Chạy kiểm thử end-to-end có kiểm soát cho từng capability được quảng bá.
 11. Ký số và đóng dấu thời gian cho các file phát hành khi CI có chứng thư ký.
-12. Công bố checksum SHA-256 qua kênh phát hành được phê duyệt.
+12. Tạo Git tag `v<version>` từ đúng commit đã build.
+13. Tạo GitHub Release từ tag và đính kèm Setup, ZIP portable, file `SHA256SUMS`.
+14. Công bố checksum SHA-256 qua kênh phát hành được phê duyệt.
 
 ## Các điểm cần review về bảo mật
 

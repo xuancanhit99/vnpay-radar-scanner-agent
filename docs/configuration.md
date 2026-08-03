@@ -29,6 +29,7 @@ qua biến môi trường của tiến trình.
 | `RADAR_AGENT_DEVICE_MODEL` | Có | `Android Device` | Nhãn model chỉ dùng để hiển thị và báo cáo tới RADAR. Trạng thái kết nối do APK Scanner cung cấp. |
 | `RADAR_AGENT_DATABASE_PATH` | Có | `./agent.db` | SQLite outbox lưu kết quả. Bản cài service ghi đè bằng đường dẫn trong `ProgramData`. |
 | `RADAR_AGENT_VERIFY_TLS` | Có | `true` | Kiểm tra chứng thư cho kết nối HTTPS tới VNPAY SSO và RADAR. |
+| `RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS` | Không | `10`, khoảng `5..30` | Chu kỳ báo trạng thái Agent/scanner/thiết bị, chạy độc lập với bài quét. |
 | `RADAR_AGENT_POLL_WAIT_SECONDS` | Không | `20`, khoảng `0..25` | Thời gian long-poll khi chờ nhận job. |
 | `RADAR_AGENT_LEASE_RENEW_INTERVAL_SECONDS` | Không | `15`, khoảng `5..30` | Khoảng thời gian giữa các lần gia hạn lease khi đang quét. |
 | `RADAR_AGENT_SCANNER_TIMEOUT_SECONDS` | Không | `400`, khoảng `30..900` | Thời gian tối đa cho request `/scan` cục bộ. |
@@ -51,6 +52,7 @@ RADAR_AGENT_CLIENT_SECRET_FILE=
 RADAR_AGENT_DEVICE_MODEL=Android Device
 RADAR_AGENT_DATABASE_PATH=./agent.db
 RADAR_AGENT_VERIFY_TLS=true
+RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS=10
 RADAR_AGENT_POLL_WAIT_SECONDS=20
 RADAR_AGENT_LEASE_RENEW_INTERVAL_SECONDS=15
 RADAR_AGENT_SCANNER_TIMEOUT_SECONDS=400
@@ -102,6 +104,8 @@ hình Windows Service.
 ## Khuyến nghị về thời gian
 
 - Đặt chu kỳ gia hạn lease ngắn hơn đáng kể so với thời hạn lease do RADAR trả về.
+- Giữ chu kỳ heartbeat thấp hơn đáng kể ngưỡng offline của Backend; mặc định `10` giây phù hợp
+  với ngưỡng offline `45` giây hiện tại.
 - Giữ thời gian poll không quá `25` giây vì contract Backend và validation phía client giới
   hạn ở mức này.
 - Chỉ tăng scanner timeout sau khi xác nhận thời lượng dự kiến của testcase. Timeout lớn hơn

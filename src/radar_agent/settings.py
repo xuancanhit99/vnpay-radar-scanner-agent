@@ -27,6 +27,7 @@ class AgentSettings(BaseSettings):
     device_model: str = "Android Device"
     database_path: Path = Path("./agent.db")
     verify_tls: bool = True
+    heartbeat_interval_seconds: int = Field(default=10, ge=5, le=30)
     poll_wait_seconds: int = Field(default=20, ge=0, le=25)
     lease_renew_interval_seconds: int = Field(default=15, ge=5, le=30)
     scanner_timeout_seconds: int = Field(default=400, ge=30, le=900)

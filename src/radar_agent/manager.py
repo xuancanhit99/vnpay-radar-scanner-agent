@@ -10,6 +10,7 @@ from tkinter import messagebox, ttk
 
 from pydantic import ValidationError
 
+from radar_agent import __version__
 from radar_agent.config_store import (
     load_settings,
     plaintext_bootstrap,
@@ -38,7 +39,7 @@ _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 class ManagerWindow(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("VNPAY RADAR Scanner Manager")
+        self.title(f"VNPAY RADAR Scanner Manager {__version__}")
         self.geometry("1040x720")
         self.minsize(900, 620)
 
@@ -125,12 +126,14 @@ class ManagerWindow(tk.Tk):
         self.service_status = tk.StringVar()
         self.direct_status = tk.StringVar()
         self.agent_status = tk.StringVar()
+        self.version_status = tk.StringVar(value=__version__)
         self.config_status = tk.StringVar()
         self.package_status = tk.StringVar()
         rows = (
             ("Windows Service", self.service_status),
             ("Direct process", self.direct_status),
             ("Agent ID", self.agent_status),
+            ("Version", self.version_status),
             ("Configuration", self.config_status),
             ("Package", self.package_status),
         )
@@ -194,6 +197,7 @@ class ManagerWindow(tk.Tk):
         self.client_secret = tk.StringVar()
         self.device_model = tk.StringVar()
         self.verify_tls = tk.BooleanVar(value=True)
+        self.heartbeat_interval = tk.IntVar(value=10)
         self.poll_wait = tk.IntVar(value=20)
         self.lease_interval = tk.IntVar(value=15)
         self.scanner_timeout = tk.IntVar(value=400)
@@ -208,6 +212,7 @@ class ManagerWindow(tk.Tk):
             ("Client ID", self.client_id, "entry"),
             ("Client secret", self.client_secret, "secret"),
             ("Device model", self.device_model, "entry"),
+            ("Heartbeat interval (seconds)", self.heartbeat_interval, "spin:5:30"),
             ("Claim wait (seconds)", self.poll_wait, "spin:0:25"),
             ("Lease renewal (seconds)", self.lease_interval, "spin:5:30"),
             ("Scanner timeout (seconds)", self.scanner_timeout, "spin:30:900"),
@@ -350,6 +355,7 @@ class ManagerWindow(tk.Tk):
         self.client_secret.set("")
         self.device_model.set(settings.device_model)
         self.verify_tls.set(settings.verify_tls)
+        self.heartbeat_interval.set(settings.heartbeat_interval_seconds)
         self.poll_wait.set(settings.poll_wait_seconds)
         self.lease_interval.set(settings.lease_renew_interval_seconds)
         self.scanner_timeout.set(settings.scanner_timeout_seconds)
@@ -370,6 +376,7 @@ class ManagerWindow(tk.Tk):
             device_model=self.device_model.get().strip(),
             database_path=self._config_path.parent / "agent.db",
             verify_tls=self.verify_tls.get(),
+            heartbeat_interval_seconds=self.heartbeat_interval.get(),
             poll_wait_seconds=self.poll_wait.get(),
             lease_renew_interval_seconds=self.lease_interval.get(),
             scanner_timeout_seconds=self.scanner_timeout.get(),

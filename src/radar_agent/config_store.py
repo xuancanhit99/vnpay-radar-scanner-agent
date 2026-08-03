@@ -15,6 +15,7 @@ _CONFIG_FIELDS = (
     ("device_model", "RADAR_AGENT_DEVICE_MODEL"),
     ("database_path", "RADAR_AGENT_DATABASE_PATH"),
     ("verify_tls", "RADAR_AGENT_VERIFY_TLS"),
+    ("heartbeat_interval_seconds", "RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS"),
     ("poll_wait_seconds", "RADAR_AGENT_POLL_WAIT_SECONDS"),
     ("lease_renew_interval_seconds", "RADAR_AGENT_LEASE_RENEW_INTERVAL_SECONDS"),
     ("scanner_timeout_seconds", "RADAR_AGENT_SCANNER_TIMEOUT_SECONDS"),

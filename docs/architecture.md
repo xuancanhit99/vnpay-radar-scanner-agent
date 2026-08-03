@@ -88,18 +88,18 @@ sequenceDiagram
     UI->>API: Đọc trạng thái/kết quả mới
 ```
 
-Worker chạy một vòng lặp chính:
+Worker chạy hai vòng lặp độc lập:
 
-1. Gửi các kết quả còn tồn trong outbox.
-2. Đọc trạng thái của scanner và thiết bị cục bộ.
-3. Gửi heartbeat tới RADAR.
-4. Long-poll để nhận một job.
-5. Khởi động job đã nhận và gia hạn lease ở background.
-6. Thực thi testcase qua scanner cục bộ.
-7. Lưu kết quả vào SQLite trước khi gửi tới RADAR.
+1. Vòng heartbeat đọc trạng thái scanner/thiết bị và gửi về RADAR mỗi
+   `RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS`, kể cả khi một bài quét đang chạy.
+2. Vòng worker gửi các kết quả còn tồn trong outbox rồi long-poll để nhận một job.
+3. Worker khởi động job đã nhận và gia hạn lease ở background.
+4. Worker thực thi testcase qua scanner cục bộ.
+5. Worker lưu kết quả vào SQLite trước khi gửi tới RADAR.
 
 Thứ tự này ưu tiên độ bền của kết quả hơn việc nhận job mới. Nếu RADAR không khả dụng khi
-outbox đang có dữ liệu chờ, Agent sẽ thử gửi lại trước khi nhận thêm job.
+outbox đang có dữ liệu chờ, Agent sẽ thử gửi lại trước khi nhận thêm job. Vòng worker chỉ bắt
+đầu sau khi Backend chấp nhận heartbeat đầu tiên.
 
 ## Xác thực và phân quyền
 

@@ -6,7 +6,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.2.0"
+  !define APP_VERSION "0.3.0"
+!endif
+!ifndef APP_FILE_VERSION
+  !define APP_FILE_VERSION "0.3.0.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -21,6 +24,13 @@ ManifestDPIAware true
 
 Name "${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\VNPAYRadarScannerAgent-Setup-${APP_VERSION}-x64.exe"
+VIProductVersion "${APP_FILE_VERSION}"
+VIAddVersionKey /LANG=1033 "CompanyName" "${COMPANY_NAME}"
+VIAddVersionKey /LANG=1033 "FileDescription" "${PRODUCT_NAME} Setup"
+VIAddVersionKey /LANG=1033 "FileVersion" "${APP_VERSION}"
+VIAddVersionKey /LANG=1033 "LegalCopyright" "Copyright VNPAY"
+VIAddVersionKey /LANG=1033 "ProductName" "${PRODUCT_NAME}"
+VIAddVersionKey /LANG=1033 "ProductVersion" "${APP_VERSION}"
 InstallDir "$PROGRAMFILES64\VNPAY\Radar Scanner Agent"
 InstallDirRegKey HKLM "Software\VNPAY\RadarScannerAgent" "InstallDirectory"
 BrandingText "VNPAY RADAR"

@@ -9,6 +9,7 @@ Trạng thái ổn định được kỳ vọng:
 - Trạng thái thiết bị: `connected` với ADB serial ổn định.
 - Request lấy SSO token: HTTP `200`.
 - Request heartbeat và claim tới RADAR: HTTP `200`.
+- Heartbeat tiếp tục được gửi trong khi scan đang chạy.
 - Số dòng pending trong `agent.db` không tăng liên tục.
 
 Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics kiểm tra theo thứ tự:
@@ -72,6 +73,7 @@ kết quả scanner.
 | APK Scanner không khả dụng | Container/tiến trình đã dừng hoặc Scanner URL sai | Khởi động APK Scanner và kiểm tra `http://127.0.0.1:8000/health`. |
 | Thiết bị bị ngắt kết nối | USB debugging bị tắt, chưa chấp nhận RSA, lỗi cáp/driver hoặc emulator offline | Kiểm tra APK Scanner `/device` và `adb devices`; kết nối lại và chấp nhận RSA authorization. |
 | Job giữ trạng thái queued | Agent offline, capability không khớp hoặc không có Agent đủ điều kiện | Kiểm tra thời điểm heartbeat, `capabilities`, trạng thái scanner/thiết bị và testcase của job. |
+| Agent chuyển offline trong khi đang scan | Heartbeat task lỗi hoặc Backend không nhận heartbeat quá ngưỡng offline | Kiểm tra log `Could not send scanner agent heartbeat`, kết nối RADAR và chu kỳ heartbeat. |
 | Cùng một máy xuất hiện hai lần | Agent ID khác nhau hoặc service và worker trực tiếp cùng chạy | Dừng tiến trình trùng và chỉ giữ một Agent ID ổn định. |
 | Không thấy kết quả trên RADAR | Backend không khả dụng; kết quả có thể vẫn nằm trong SQLite outbox | Khôi phục kết nối RADAR và giữ nguyên `agent.db`; Agent sẽ thử gửi lại trước khi nhận việc mới. |
 | Lỗi lease lặp lại | Độ trễ Backend/lỗi mạng hoặc chu kỳ gia hạn quá dài | Kiểm tra kết nối RADAR và so sánh chu kỳ gia hạn với thời hạn lease từ Backend. |

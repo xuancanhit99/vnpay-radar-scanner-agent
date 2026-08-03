@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 
 
 project_root = Path(SPECPATH).parent
+version_file = os.environ.get("RADAR_AGENT_VERSION_FILE")
 
 analysis = Analysis(
     [str(project_root / "src" / "radar_agent" / "__main__.py")],
@@ -30,6 +32,7 @@ executable = EXE(
     upx=False,
     console=True,
     disable_windowed_traceback=False,
+    version=version_file,
 )
 
 bundle = COLLECT(

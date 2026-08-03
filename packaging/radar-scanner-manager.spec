@@ -1,7 +1,9 @@
+import os
 from pathlib import Path
 
 
 project_root = Path(SPECPATH).parent
+version_file = os.environ.get("RADAR_MANAGER_VERSION_FILE")
 
 analysis = Analysis(
     [str(project_root / "src" / "radar_agent" / "manager_main.py")],
@@ -32,4 +34,5 @@ executable = EXE(
     console=False,
     disable_windowed_traceback=False,
     uac_admin=True,
+    version=version_file,
 )
