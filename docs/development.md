@@ -30,6 +30,7 @@ vnpay-radar-scanner-agent/
 |   `-- secret_store.py     # Các hàm Windows DPAPI cơ bản
 |-- packaging/
 |   |-- build.ps1
+|   |-- verify-release.ps1
 |   |-- installer.nsi
 |   |-- install-service.ps1
 |   `-- uninstall-service.ps1
@@ -38,6 +39,18 @@ vnpay-radar-scanner-agent/
 |-- .env.example
 `-- pyproject.toml
 ```
+
+## GitHub Actions
+
+Repository sử dụng hai workflow:
+
+- `CI`: chạy Ruff, Pytest, build và xác minh package trên mọi pull request và push vào
+  `develop`. Artifact preview được giữ 7 ngày.
+- `Release`: chạy khi push tag `vMAJOR.MINOR.PATCH`, kiểm tra tag khớp metadata, build lại từ
+  tagged commit, xác minh artifact rồi tạo GitHub Release bằng `GITHUB_TOKEN` của workflow.
+
+Các action được ghim theo commit SHA. Pipeline không cần PAT hoặc secret ứng dụng. Chứng thư
+Authenticode sẽ được bổ sung dưới dạng GitHub Environment secret khi có quy trình ký production.
 
 ## Thiết lập môi trường local
 
@@ -142,6 +155,8 @@ Quy trình build thực hiện:
 5. Tải WinSW và kiểm tra checksum SHA-256 đã ghim.
 6. Tạo file ZIP portable.
 7. Biên dịch bộ Setup bằng NSIS.
+8. Chạy `verify-release.ps1` để kiểm tra checksum, version metadata, cấu trúc ZIP và runtime
+   file không được phép.
 
 Kết quả:
 
@@ -192,9 +207,10 @@ uv lock
 9. Chạy toàn bộ Diagnostics của Manager trên môi trường mục tiêu.
 10. Chạy kiểm thử end-to-end có kiểm soát cho từng capability được quảng bá.
 11. Ký số và đóng dấu thời gian cho các file phát hành khi CI có chứng thư ký.
-12. Tạo Git tag `v<version>` từ đúng commit đã build.
-13. Tạo GitHub Release từ tag và đính kèm Setup, ZIP portable, file `SHA256SUMS`.
-14. Công bố checksum SHA-256 qua kênh phát hành được phê duyệt.
+12. Merge commit đã qua CI vào `develop`.
+13. Tạo và push Git tag `v<version>` từ đúng commit; GitHub Actions tự build và phát hành.
+14. Xác nhận workflow Release thành công và ba asset xuất hiện trên GitHub Release.
+15. Công bố checksum SHA-256 qua kênh phát hành được phê duyệt.
 
 ## Các điểm cần review về bảo mật
 

@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Test and lint
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        shell: pwsh
+        run: python -m pip install uv==0.10.4
+
+      - name: Install dependencies
+        shell: pwsh
+        run: uv sync --frozen --group dev
+
+      - name: Audit runtime dependencies
+        shell: pwsh
+        run: |
+          $requirements = Join-Path $env:RUNNER_TEMP "runtime-requirements.txt"
+          uv export --frozen --no-dev --no-emit-project `
+            --format requirements-txt --output-file $requirements
+          uvx --from pip-audit==2.10.1 pip-audit -r $requirements
+
+      - name: Lint
+        shell: pwsh
+        run: uv run ruff check src tests
+
+      - name: Test
+        shell: pwsh
+        run: uv run pytest -q
+
+  package:
+    name: Build Windows package
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          python -m pip install uv==0.10.4
+          choco install nsis --no-progress -y
+
+      - name: Build package
+        shell: pwsh
+        run: .\packaging\build.ps1 -SkipTests
+
+      - name: Verify package
+        shell: pwsh
+        run: .\packaging\verify-release.ps1
+
+      - name: Upload preview artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scanner-agent-${{ github.sha }}
+          path: packaging/output/*
+          if-no-files-found: error
+          retention-days: 7
