@@ -3,6 +3,8 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from radar_agent.secret_store import unprotect_secret
+
 
 class AgentSettings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -21,6 +23,7 @@ class AgentSettings(BaseSettings):
     )
     client_id: str = "vnpay-radar-agent"
     client_secret: str = ""
+    client_secret_file: Path | None = None
     device_model: str = "Xiaomi 13"
     database_path: Path = Path("./agent.db")
     verify_tls: bool = True
@@ -29,6 +32,16 @@ class AgentSettings(BaseSettings):
     scanner_timeout_seconds: int = Field(default=400, ge=30, le=900)
     retry_delay_seconds: int = Field(default=5, ge=1, le=60)
 
+    def resolved_client_secret(self) -> str:
+        if self.client_secret:
+            return self.client_secret
+        if self.client_secret_file is not None:
+            secret = unprotect_secret(self.client_secret_file)
+            if secret:
+                return secret
+        raise ValueError(
+            "RADAR_AGENT_CLIENT_SECRET or RADAR_AGENT_CLIENT_SECRET_FILE is required"
+        )
+
     def validate_runtime(self) -> None:
-        if not self.client_secret:
-            raise ValueError("RADAR_AGENT_CLIENT_SECRET is required")
+        self.resolved_client_secret()

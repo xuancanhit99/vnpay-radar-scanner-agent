@@ -29,7 +29,7 @@ class TokenProvider:
                 self._settings.token_url,
                 data={
                     "client_id": self._settings.client_id,
-                    "client_secret": self._settings.client_secret,
+                    "client_secret": self._settings.resolved_client_secret(),
                     "grant_type": "client_credentials",
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"},

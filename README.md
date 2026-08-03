@@ -15,8 +15,9 @@ uv sync
 uv run radar-scanner-agent
 ```
 
-The client secret is only accepted from local environment configuration for the console MVP.
-Before Windows Service rollout, move it to Windows Credential Manager or a DPAPI-protected file.
+Console mode accepts the client secret from local environment configuration. The Windows
+Service installer removes the plaintext secret from the installed `.env` and stores it in a
+machine-scoped DPAPI file that is readable only by LocalSystem and local Administrators.
 
 Required Keycloak client configuration:
 
@@ -27,6 +28,41 @@ Required Keycloak client configuration:
 
 Local state defaults to `C:\ProgramData\VNPAY\RadarScannerAgent\agent.db`. SQLite is only an
 outbox for results awaiting delivery; PostgreSQL in RADAR remains the source of truth.
+
+## Build and install the Windows Service
+
+Build the signed-input, unsigned-output development package from PowerShell:
+
+```powershell
+.\packaging\build.ps1
+```
+
+The build runs tests and Ruff, creates a PyInstaller `onedir` bundle, downloads pinned WinSW
+`v2.12.0`, verifies its SHA-256 checksum, and writes the ZIP to `packaging/output/`.
+
+Open PowerShell as Administrator and install from the unzipped package or build directory:
+
+```powershell
+.\install-service.ps1 -ConfigFile C:\path\to\vnpay-radar-scanner-agent\.env
+```
+
+Installed paths:
+
+- Program: `C:\Program Files\VNPAY\Radar Scanner Agent`
+- Config/state: `C:\ProgramData\VNPAY\RadarScannerAgent`
+- Logs: `C:\ProgramData\VNPAY\RadarScannerAgent\logs`
+- Service: `VNPAYRadarScannerAgent` with delayed automatic start and restart-on-failure
+
+Operational checks:
+
+```powershell
+Get-Service VNPAYRadarScannerAgent
+Restart-Service VNPAYRadarScannerAgent
+Get-Content C:\ProgramData\VNPAY\RadarScannerAgent\logs\VNPAYRadarScannerAgent.err.log -Tail 100
+```
+
+The service runs as `LocalSystem`. The APK Scanner must continue listening only on
+`127.0.0.1:8000`; Docker Desktop or the local Docker engine must be running for jobs to execute.
 
 ## API contract
 
