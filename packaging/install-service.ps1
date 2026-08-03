@@ -12,6 +12,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $serviceName = "VNPAYRadarScannerAgent"
+$installingUserSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
 $principal = [Security.Principal.WindowsPrincipal]::new(
     [Security.Principal.WindowsIdentity]::GetCurrent()
 )
@@ -66,7 +67,8 @@ if ($existingService) {
 
 New-Item -ItemType Directory -Path $InstallDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $DataDirectory -Force | Out-Null
-New-Item -ItemType Directory -Path (Join-Path $DataDirectory "logs") -Force | Out-Null
+$logDirectory = Join-Path $DataDirectory "logs"
+New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
 Copy-Item -Path (Join-Path $package "*") -Destination $InstallDirectory -Recurse -Force
 
 $secretFile = Join-Path $DataDirectory "client-secret.dpapi"
@@ -98,7 +100,7 @@ $installedEnv = Join-Path $DataDirectory ".env"
 [IO.File]::WriteAllLines($installedEnv, $serviceConfig, [Text.UTF8Encoding]::new($false))
 
 $escapedDataDirectory = [Security.SecurityElement]::Escape($DataDirectory)
-$escapedLogDirectory = [Security.SecurityElement]::Escape((Join-Path $DataDirectory "logs"))
+$escapedLogDirectory = [Security.SecurityElement]::Escape($logDirectory)
 $xml = @"
 <service>
   <id>$serviceName</id>
@@ -122,8 +124,14 @@ $installedXml = Join-Path $InstallDirectory "$serviceName.xml"
 [IO.File]::WriteAllText($installedXml, $xml, [Text.UTF8Encoding]::new($false))
 
 & icacls $DataDirectory /inheritance:r `
-    /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
+    /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' `
+    "*$($installingUserSid):(RX)" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "Could not secure $DataDirectory" }
+& icacls $logDirectory /grant:r "*$($installingUserSid):(OI)(CI)R" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Could not grant log read access." }
+& icacls $secretFile /inheritance:r `
+    /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Could not secure the DPAPI secret file." }
 
 $wrapper = Join-Path $InstallDirectory "$serviceName.exe"
 & $wrapper install

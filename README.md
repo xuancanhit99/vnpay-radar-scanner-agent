@@ -53,6 +53,9 @@ Installed paths:
 - Logs: `C:\ProgramData\VNPAY\RadarScannerAgent\logs`
 - Service: `VNPAYRadarScannerAgent` with delayed automatic start and restart-on-failure
 
+The installing Windows user receives read-only access to the log directory. The DPAPI secret
+file and SQLite outbox remain restricted to LocalSystem and local Administrators.
+
 Operational checks:
 
 ```powershell

@@ -32,4 +32,7 @@ def _configure_logging() -> None:
 
 def main() -> None:
     _configure_logging()
-    asyncio.run(run_agent(AgentSettings()))
+    try:
+        asyncio.run(run_agent(AgentSettings()))
+    except KeyboardInterrupt:
+        logging.getLogger(__name__).info("Scanner agent stopped")
