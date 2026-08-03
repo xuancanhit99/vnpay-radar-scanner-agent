@@ -6,7 +6,9 @@ RADAR Backend, giao việc thực thi cho `apk-scan-api` cục bộ và gửi k�
 Phiên bản hiện tại hỗ trợ chạy một job tại một thời điểm và capability `TC-MOBI-3`.
 
 Phiên bản phát hành dùng Semantic Versioning. Có thể kiểm tra phiên bản tại tab **Overview**
-của Scanner Manager, heartbeat trên RADAR, hoặc mục Apps & features của Windows.
+của Scanner Manager, heartbeat trên RADAR, hoặc mục Apps & features của Windows. Từ phiên bản
+`0.4.0`, Manager tự kiểm tra GitHub Releases và hỗ trợ cập nhật bằng một nút sau khi xác minh
+checksum SHA-256 của bộ Setup.
 
 ## Mô hình triển khai
 
@@ -76,6 +78,7 @@ Agent không cần role partner, SPI hoặc HR-sync của VNPAY SSO.
 - [Tham chiếu cấu hình](docs/configuration.md)
 - [Vận hành và xử lý sự cố](docs/operations.md)
 - [Phát triển và phát hành](docs/development.md)
+- [Cập nhật tự động](docs/updates.md)
 
 ## Kiểm tra khi phát triển
 

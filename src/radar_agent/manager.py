@@ -32,6 +32,12 @@ from radar_agent.service_control import (
     service_action,
 )
 from radar_agent.settings import AgentSettings
+from radar_agent.update_service import (
+    UpdateInfo,
+    check_for_update,
+    download_installer,
+    launch_installer,
+)
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -50,6 +56,9 @@ class ManagerWindow(tk.Tk):
         self._direct_process: subprocess.Popen[str] | None = None
         self._process_output: queue.Queue[str] = queue.Queue()
         self._operation_running = False
+        self._update_check_running = False
+        self._update_install_running = False
+        self._available_update: UpdateInfo | None = None
 
         self._configure_style()
         self._build_ui()
@@ -58,6 +67,7 @@ class ManagerWindow(tk.Tk):
         self.refresh_logs()
         self.protocol("WM_DELETE_WINDOW", self._close_window)
         self.after(500, self._drain_process_output)
+        self.after(1200, lambda: self.check_for_updates(silent=True))
         self.after(4000, self._status_tick)
 
     def _configure_style(self) -> None:
@@ -83,6 +93,11 @@ class ManagerWindow(tk.Tk):
         style.configure("Status.TLabel", foreground="#1f3448")
         style.configure("Success.TLabel", foreground="#177245", font=("Segoe UI", 9, "bold"))
         style.configure("Error.TLabel", foreground="#b42318", font=("Segoe UI", 9, "bold"))
+        style.configure(
+            "Update.TLabel",
+            foreground="#9a4d00",
+            font=("Segoe UI", 9, "bold"),
+        )
         style.configure("TNotebook.Tab", padding=(18, 9))
         style.configure("Treeview", rowheight=29, font=("Segoe UI", 9))
         style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
@@ -145,8 +160,32 @@ class ManagerWindow(tk.Tk):
                 row=row, column=1, sticky=tk.W, pady=6
             )
 
+        update = ttk.LabelFrame(page, text="Software update", style="Section.TLabelframe")
+        update.grid(row=1, column=0, sticky="ew", pady=(16, 0))
+        update.columnconfigure(0, weight=1)
+        self.update_status = tk.StringVar(value="Checking for updates...")
+        self.update_status_label = ttk.Label(
+            update,
+            textvariable=self.update_status,
+            style="Status.TLabel",
+        )
+        self.update_status_label.grid(row=0, column=0, sticky=tk.W, padx=(0, 16))
+        self.check_update_button = ttk.Button(
+            update,
+            text="Check again",
+            command=self.check_for_updates,
+        )
+        self.check_update_button.grid(row=0, column=1, padx=(0, 9))
+        self.install_update_button = ttk.Button(
+            update,
+            text="Update now",
+            command=self.install_available_update,
+            state=tk.DISABLED,
+        )
+        self.install_update_button.grid(row=0, column=2)
+
         service = ttk.LabelFrame(page, text="Windows Service", style="Section.TLabelframe")
-        service.grid(row=1, column=0, sticky="ew", pady=(16, 0))
+        service.grid(row=2, column=0, sticky="ew", pady=(16, 0))
         self.install_button = ttk.Button(
             service, text="Install / upgrade", command=self.install_or_upgrade_service
         )
@@ -165,7 +204,7 @@ class ManagerWindow(tk.Tk):
             button.grid(row=0, column=column, padx=(0, 9))
 
         direct = ttk.LabelFrame(page, text="Direct run", style="Section.TLabelframe")
-        direct.grid(row=2, column=0, sticky="ew", pady=(16, 0))
+        direct.grid(row=3, column=0, sticky="ew", pady=(16, 0))
         self.direct_start_button = ttk.Button(
             direct, text="Run directly", command=self.start_direct
         )
@@ -182,7 +221,7 @@ class ManagerWindow(tk.Tk):
             "setup and diagnostics and is disabled while the service is running."
         )
         ttk.Label(page, text=note, foreground="#607487", wraplength=820).grid(
-            row=3, column=0, sticky=tk.W, pady=(16, 0)
+            row=4, column=0, sticky=tk.W, pady=(16, 0)
         )
 
     def _build_configuration_tab(self) -> None:
@@ -440,6 +479,112 @@ class ManagerWindow(tk.Tk):
         if self.winfo_exists():
             self.refresh_status()
             self.after(4000, self._status_tick)
+
+    def check_for_updates(self, *, silent: bool = False) -> None:
+        if self._update_check_running or self._update_install_running:
+            return
+        self._update_check_running = True
+        self.check_update_button.configure(state=tk.DISABLED)
+        self.install_update_button.configure(state=tk.DISABLED)
+        self.update_status.set("Checking for updates...")
+        self.update_status_label.configure(style="Status.TLabel")
+
+        def worker() -> None:
+            try:
+                update = check_for_update(__version__)
+            except Exception as exc:
+                error = str(exc)
+                self.after(0, lambda message=error: self._show_update_error(message, silent))
+            else:
+                self.after(0, lambda: self._show_update_result(update))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_update_result(self, update: UpdateInfo) -> None:
+        self._update_check_running = False
+        self.check_update_button.configure(state=tk.NORMAL)
+        if update.available:
+            self._available_update = update
+            self.update_status.set(f"Version {update.latest_version} is available")
+            self.update_status_label.configure(style="Update.TLabel")
+            self.install_update_button.configure(state=tk.NORMAL)
+        else:
+            self._available_update = None
+            self.update_status.set(f"Up to date ({__version__})")
+            self.update_status_label.configure(style="Success.TLabel")
+            self.install_update_button.configure(state=tk.DISABLED)
+
+    def _show_update_error(self, error: str, silent: bool) -> None:
+        self._update_check_running = False
+        self.check_update_button.configure(state=tk.NORMAL)
+        self.install_update_button.configure(
+            state=tk.NORMAL if self._available_update else tk.DISABLED
+        )
+        self.update_status.set("Unable to check for updates")
+        self.update_status_label.configure(style="Error.TLabel")
+        if not silent:
+            messagebox.showerror("Software update", error, parent=self)
+
+    def install_available_update(self) -> None:
+        update = self._available_update
+        if update is None or self._update_install_running:
+            return
+        confirmed = messagebox.askyesno(
+            "Software update",
+            f"Install version {update.latest_version} now?\n\n"
+            "The Manager will close and the Windows Service will restart automatically.",
+            parent=self,
+        )
+        if not confirmed:
+            return
+
+        self._update_install_running = True
+        self.check_update_button.configure(state=tk.DISABLED)
+        self.install_update_button.configure(state=tk.DISABLED)
+        self.update_status.set(f"Downloading version {update.latest_version}...")
+        self.update_status_label.configure(style="Status.TLabel")
+
+        def progress(received: int, total: int | None) -> None:
+            if total:
+                percent = min(100, int(received * 100 / total))
+                message = f"Downloading version {update.latest_version}... {percent}%"
+            else:
+                message = f"Downloading version {update.latest_version}... {received // 1024} KB"
+            self.after(0, lambda text=message: self.update_status.set(text))
+
+        def worker() -> None:
+            try:
+                installer = download_installer(
+                    update,
+                    program_data_directory() / "updates",
+                    progress=progress,
+                )
+            except Exception as exc:
+                error = str(exc)
+                self.after(0, lambda message=error: self._update_download_failed(message))
+            else:
+                self.after(0, lambda: self._launch_downloaded_update(installer))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _update_download_failed(self, error: str) -> None:
+        self._update_install_running = False
+        self.check_update_button.configure(state=tk.NORMAL)
+        self.install_update_button.configure(state=tk.NORMAL)
+        self.update_status.set("Update download failed")
+        self.update_status_label.configure(style="Error.TLabel")
+        messagebox.showerror("Software update", error, parent=self)
+
+    def _launch_downloaded_update(self, installer: Path) -> None:
+        try:
+            if self._direct_process is not None and self._direct_process.poll() is None:
+                self.stop_direct()
+            launch_installer(installer)
+        except Exception as exc:
+            self._update_download_failed(str(exc))
+            return
+        self.update_status.set("Starting installer...")
+        self.after(400, self.destroy)
 
     def _run_operation(self, operation, *, title: str, success_message: str) -> None:
         if self._operation_running:

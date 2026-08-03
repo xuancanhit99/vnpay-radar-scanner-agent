@@ -78,6 +78,8 @@ kết quả scanner.
 | Không thấy kết quả trên RADAR | Backend không khả dụng; kết quả có thể vẫn nằm trong SQLite outbox | Khôi phục kết nối RADAR và giữ nguyên `agent.db`; Agent sẽ thử gửi lại trước khi nhận việc mới. |
 | Lỗi lease lặp lại | Độ trễ Backend/lỗi mạng hoặc chu kỳ gia hạn quá dài | Kiểm tra kết nối RADAR và so sánh chu kỳ gia hạn với thời hạn lease từ Backend. |
 | Setup không thể thay thế file | Service/tiến trình hiện tại vẫn đang giữ file thực thi | Dùng Setup 0.3.1 trở lên để tự động đóng Manager và dừng/khởi động lại service. |
+| Manager không kiểm tra được bản mới | Không truy cập được GitHub API, proxy chặn hoặc TLS lỗi | Kiểm tra HTTPS chiều đi tới `api.github.com` và `github.com`, sau đó chọn **Check again**. |
+| Tải update thất bại | Asset thiếu, vượt giới hạn hoặc SHA-256 không khớp | Không chạy file đã tải; kiểm tra GitHub Release và file `SHA256SUMS`, rồi thử lại. |
 
 ## Kiểm tra thiết bị trước khi chạy
 
@@ -132,3 +134,4 @@ Sau khi Setup hoàn tất:
 - Chỉ quảng bá capability `TC-MOBI-3`.
 - Agent ghi nhận yêu cầu hủy khi gia hạn lease nhưng chưa ngắt request HTTP cục bộ đang chạy.
 - Bản build phát triển chưa được ký số cho tới khi bổ sung code signing vào CI.
+- Auto-update yêu cầu HTTPS chiều đi tới GitHub và chỉ hỗ trợ package Windows đã cài bằng Setup.

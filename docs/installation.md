@@ -92,7 +92,15 @@ Quá trình khởi động khỏe mạnh có request thành công tới:
 
 ## Nâng cấp
 
-Chạy file Setup phiên bản mới hơn với quyền Administrator. Khi service đã tồn tại, Setup sẽ:
+Từ phiên bản `0.4.0`, tab **Overview** tự kiểm tra GitHub Releases khi Manager khởi động. Khi
+có bản mới, chọn **Update now**, xác nhận nâng cấp và chờ Manager tải, kiểm tra SHA-256 rồi chạy
+Setup. Xác nhận hộp thoại UAC để cấp quyền Administrator. Manager sẽ đóng; mở lại sau khi Setup
+hoàn tất.
+
+Máy đang dùng phiên bản cũ hơn `0.4.0` cần cài Setup `0.4.0` thủ công một lần. Có thể tiếp tục
+nâng cấp thủ công bằng cách chạy file Setup phiên bản mới hơn với quyền Administrator.
+
+Khi service đã tồn tại, Setup sẽ:
 
 1. Đóng các process Scanner Manager đang mở để giải phóng file thực thi.
 2. Phát hiện và dừng service.
