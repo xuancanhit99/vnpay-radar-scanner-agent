@@ -15,6 +15,7 @@ class ScannerClient:
         scanner_status = "unavailable"
         device_status = "disconnected"
         device_serial = None
+        device_model = self._settings.device_model
         try:
             health = await self._client.get(f"{self._settings.scanner_url}/health", timeout=5)
             health.raise_for_status()
@@ -29,6 +30,9 @@ class ScannerClient:
             if selected.get("online"):
                 device_status = "connected"
                 device_serial = selected.get("serial")
+                detected_model = str(device_payload.get("deviceModel") or "").strip()
+                if detected_model:
+                    device_model = detected_model
         except (httpx.HTTPError, ValueError):
             scanner_status = "unavailable"
 
@@ -40,7 +44,7 @@ class ScannerClient:
             "scanner_status": scanner_status,
             "device_status": device_status,
             "device_serial": device_serial,
-            "device_model": self._settings.device_model,
+            "device_model": device_model,
             "capabilities": ["TC-MOBI-3"],
         }
 

@@ -211,7 +211,7 @@ class ManagerWindow(tk.Tk):
             ("SSO token URL", self.token_url, "entry"),
             ("Client ID", self.client_id, "entry"),
             ("Client secret", self.client_secret, "secret"),
-            ("Device model", self.device_model, "entry"),
+            ("Device model fallback", self.device_model, "entry"),
             ("Heartbeat interval (seconds)", self.heartbeat_interval, "spin:5:30"),
             ("Claim wait (seconds)", self.poll_wait, "spin:0:25"),
             ("Lease renewal (seconds)", self.lease_interval, "spin:5:30"),
