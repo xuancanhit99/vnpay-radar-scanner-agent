@@ -33,6 +33,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.2` sửa readiness của `TC-MOBI-13`: cáp USB đang cắm và kênh ADB Wi-Fi online là
+  đủ để scanner tự chuyển sang USB khi bắt đầu testcase.
 - Các bản trước `0.4.0` không có updater, vì vậy phải cài `0.4.0` thủ công một lần.
 - Bản `0.5.0` nâng cấp thành công nhưng không tự mở lại Manager. Từ `0.5.1`, silent update tự
   relaunch Manager sau khi service đã chạy lại.

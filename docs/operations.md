@@ -71,7 +71,7 @@ kết quả scanner.
 | RADAR trả `401` | Token hết hạn/không hợp lệ hoặc issuer không khớp | Xác nhận RADAR URL và realm của token cùng môi trường; Agent sẽ thử lại một lần với token mới. |
 | RADAR trả `403` | Service account thiếu role `scanner-agent` | Gán client role này cho chính service-account user của client. |
 | APK Scanner không khả dụng | Container/tiến trình đã dừng hoặc Scanner URL sai | Khởi động APK Scanner và kiểm tra `http://127.0.0.1:8000/health`. |
-| Thiết bị bị ngắt kết nối | USB debugging bị tắt, chưa chấp nhận RSA, lỗi cáp/driver hoặc emulator offline | Kiểm tra APK Scanner `/device` và `adb devices`; kết nối lại và chấp nhận RSA authorization. |
+| Thiết bị bị ngắt kết nối | USB debugging bị tắt, chưa chấp nhận RSA, lỗi cáp/driver hoặc emulator offline | Kiểm tra APK Scanner `/device` và `adb devices`; `usb.online=false`, `usb.cable_connected=true`, `wifi.online=true` là trạng thái hợp lệ khi `adbhide` đang bật. |
 | Job giữ trạng thái queued | Agent offline, capability không khớp hoặc không có Agent đủ điều kiện | Kiểm tra thời điểm heartbeat, `capabilities`, trạng thái scanner/thiết bị và testcase của job. |
 | Agent chuyển offline trong khi đang scan | Heartbeat task lỗi hoặc Backend không nhận heartbeat quá ngưỡng offline | Kiểm tra log `Could not send scanner agent heartbeat`, kết nối RADAR và chu kỳ heartbeat. |
 | Cùng một máy xuất hiện hai lần | Agent ID khác nhau hoặc service và worker trực tiếp cùng chạy | Dừng tiến trình trùng và chỉ giữ một Agent ID ổn định. |

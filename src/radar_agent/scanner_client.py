@@ -63,7 +63,12 @@ def _capability_status(
     device_payload: dict[str, Any],
 ) -> dict[str, Any]:
     device_type = testcase["device_type"]
-    usb_online = bool((device_payload.get("usb") or {}).get("online"))
+    usb = device_payload.get("usb") or {}
+    usb_online = bool(usb.get("online"))
+    # Scanner API cũ chưa có cable_connected. USB ADB online vẫn là bằng chứng chắc
+    # chắn cáp đang cắm; với adbhide ON, ADB chuyển sang Wi-Fi nhưng cable_connected
+    # vẫn cho phép TC-MOBI-13 tự chuyển lại sang USB khi bắt đầu chạy.
+    usb_cable_connected = usb_online or bool(usb.get("cable_connected"))
     wifi_online = bool((device_payload.get("wifi") or {}).get("online"))
     emulator_online = bool((device_payload.get("emulator") or {}).get("online"))
 
@@ -73,8 +78,10 @@ def _capability_status(
         ready, reason = False, "APK Scanner đang chạy testcase khác"
     elif device_type == "main" and not (usb_online or wifi_online):
         ready, reason = False, "Thiết bị Android chưa kết nối qua USB hoặc Wi-Fi"
-    elif device_type == "main_usb" and not usb_online:
-        ready, reason = False, "Testcase yêu cầu thiết bị kết nối qua USB"
+    elif device_type == "main_usb" and not (usb_online or wifi_online):
+        ready, reason = False, "Thiết bị Android chưa kết nối qua USB hoặc Wi-Fi"
+    elif device_type == "main_usb" and not usb_cable_connected:
+        ready, reason = False, "Testcase yêu cầu cáp USB đang kết nối"
     elif device_type == "emulator" and not emulator_online:
         ready, reason = False, "Testcase yêu cầu Android Emulator đang chạy"
     else:

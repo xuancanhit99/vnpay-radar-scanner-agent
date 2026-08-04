@@ -66,7 +66,11 @@ async def test_heartbeat_advertises_dynamic_testcases_with_readiness() -> None:
                 200,
                 json={
                     "deviceModel": "Xiaomi 13",
-                    "usb": {"online": True, "serial": "314ebbfe"},
+                    "usb": {
+                        "online": True,
+                        "serial": "314ebbfe",
+                        "cable_connected": True,
+                    },
                     "wifi": {"online": False, "serial": None},
                     "emulator": {"online": False, "serial": "emulator-5554"},
                 },
@@ -115,7 +119,7 @@ async def test_heartbeat_advertises_dynamic_testcases_with_readiness() -> None:
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_requires_usb_for_usb_debug_testcase() -> None:
+async def test_heartbeat_requires_physical_cable_for_usb_debug_testcase() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/health":
             return httpx.Response(200, json={"busy": False})
@@ -123,7 +127,11 @@ async def test_heartbeat_requires_usb_for_usb_debug_testcase() -> None:
             return httpx.Response(
                 200,
                 json={
-                    "usb": {"online": False, "serial": None},
+                    "usb": {
+                        "online": False,
+                        "serial": None,
+                        "cable_connected": False,
+                    },
                     "wifi": {"online": True, "serial": "192.0.2.10:5555"},
                     "emulator": {"online": False, "serial": "emulator-5554"},
                 },
@@ -153,4 +161,52 @@ async def test_heartbeat_requires_usb_for_usb_debug_testcase() -> None:
 
     status = payload["capability_statuses"][0]
     assert status["ready"] is False
-    assert status["reason"] == "Testcase yêu cầu thiết bị kết nối qua USB"
+    assert status["reason"] == "Testcase yêu cầu cáp USB đang kết nối"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_allows_usb_debug_testcase_over_wifi_when_cable_is_connected() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"busy": False})
+        if request.url.path == "/device":
+            return httpx.Response(
+                200,
+                json={
+                    "usb": {
+                        "online": False,
+                        "serial": "314ebbfe",
+                        "cable_connected": True,
+                    },
+                    "wifi": {"online": True, "serial": "192.0.2.10:5555"},
+                    "emulator": {"online": False, "serial": "emulator-5554"},
+                },
+            )
+        if request.url.path == "/testcases":
+            return httpx.Response(
+                200,
+                json={
+                    "testcases": [
+                        {
+                            "sectionId": "TC-MOBI-13",
+                            "name": "Check USB Debug",
+                            "device_type": "main_usb",
+                            "timeout_seconds": 360,
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        payload = await ScannerClient(settings, client).heartbeat_payload(
+            hostname="WINDOWS-LAB",
+            version="0.5.2",
+        )
+
+    status = payload["capability_statuses"][0]
+    assert payload["device_status"] == "connected"
+    assert payload["device_serial"] == "192.0.2.10:5555"
+    assert status["ready"] is True
+    assert status["reason"] is None
