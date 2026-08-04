@@ -81,7 +81,7 @@ kết quả scanner.
 | Manager không kiểm tra được bản mới | Không truy cập được GitHub API, proxy chặn hoặc TLS lỗi | Kiểm tra HTTPS chiều đi tới `api.github.com` và `github.com`, sau đó chọn **Check again**. |
 | Tải update thất bại | Asset thiếu, vượt giới hạn hoặc SHA-256 không khớp | Không chạy file đã tải; kiểm tra GitHub Release và file `SHA256SUMS`, rồi thử lại. |
 | Service không start sau khi cài lại | Service registration cũ chưa được gỡ hoàn toàn hoặc worker thoát khi khởi động | Mở tab **Logs** và kiểm tra `VNPAYRadarScannerAgent.err.log` cùng `VNPAYRadarScannerAgent.wrapper.log`. Từ bản `0.5.4`, Setup tự dọn registration mồ côi và không xóa application files nếu uninstall service thất bại. |
-| Manager đóng sau khi tải update nhưng không mở lại | Silent Setup thất bại sau khi đã đóng Manager | Cài bản `0.5.5` trở lên. Setup ghi kết quả vào Registry và tự mở lại Manager kể cả khi thất bại; trạng thái cụ thể xuất hiện trong **Software update**. |
+| Manager đóng sau khi tải update nhưng không mở lại | Setup cũ dùng `taskkill /T`, làm đóng cả process Setup được Manager khởi chạy | Cài thủ công bản `0.5.6` một lần. Các lần sau có thể dùng **Update now**; Setup chỉ đóng Manager, tiếp tục nâng cấp service và tự mở lại Manager. |
 
 ## Kiểm tra thiết bị trước khi chạy
 

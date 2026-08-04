@@ -33,6 +33,9 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.6` sửa nguyên nhân Setup bị đóng ngay sau khi tải xong: không còn dùng `taskkill /T`
+  vì silent Setup là process con của Manager. Setup chỉ đóng các process Manager và tiếp tục nâng
+  cấp service bình thường.
 - Bản `0.5.5` giữ Manager mở trong lúc chờ UAC, ghi kết quả Setup vào Registry và tự mở lại
   Manager khi silent update thất bại. Màn hình **Software update** hiển thị rõ trạng thái sau khi
   cài đặt thay vì đóng mà không có phản hồi.

@@ -58,3 +58,11 @@ def test_manager_waits_for_installer_to_close_it() -> None:
 
     assert "launch_installer(installer)" in method
     assert "self.destroy" not in method
+
+
+def test_installer_does_not_kill_its_own_process_tree() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    taskkill_lines = [line for line in script.splitlines() if "taskkill.exe" in line]
+    assert taskkill_lines
+    assert all(" /T " not in line for line in taskkill_lines)

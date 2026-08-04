@@ -171,7 +171,7 @@ def test_launch_installer_reports_windows_shell_error(tmp_path, monkeypatch) -> 
 def test_read_installer_status_from_windows_registry(monkeypatch) -> None:
     values = {
         "LastUpdateState": "failed",
-        "LastUpdateVersion": "0.5.5",
+        "LastUpdateVersion": "0.5.6",
         "LastUpdateMessage": "Service could not be restarted.",
     }
     fake_winreg = type(
@@ -190,7 +190,7 @@ def test_read_installer_status_from_windows_registry(monkeypatch) -> None:
 
     assert status is not None
     assert status.state == "failed"
-    assert status.version == "0.5.5"
+    assert status.version == "0.5.6"
     assert status.message == "Service could not be restarted."
 
 
@@ -205,12 +205,12 @@ def test_manager_shows_failed_installer_status() -> None:
         window,
         InstallerStatus(
             state="failed",
-            version="0.5.5",
+            version="0.5.6",
             message="Service could not be restarted.",
         ),
     )
 
     assert window.update_status.value == (
-        "Update to version 0.5.5 failed: Service could not be restarted."
+        "Update to version 0.5.6 failed: Service could not be restarted."
     )
     assert window.update_status_label.style == "Error.TLabel"

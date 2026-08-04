@@ -6,10 +6,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.5.5"
+  !define APP_VERSION "0.5.6"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.5.5.0"
+  !define APP_FILE_VERSION "0.5.6.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -60,7 +60,8 @@ Section "RADAR Scanner Agent" SEC_MAIN
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "installing"
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" ""
-  nsExec::ExecToStack 'taskkill.exe /IM "radar-scanner-manager.exe" /T /F'
+  ; Do not use /T here: Setup is launched by Manager and is therefore its child process.
+  nsExec::ExecToStack 'taskkill.exe /IM "radar-scanner-manager.exe" /F'
   Pop $0
   Pop $1
   Sleep 1000
