@@ -195,7 +195,7 @@ class ManagerWindow(tk.Tk):
         service = ttk.LabelFrame(page, text="Windows Service", style="Section.TLabelframe")
         service.grid(row=2, column=0, sticky="ew", pady=(16, 0))
         self.install_button = ttk.Button(
-            service, text="Install / upgrade", command=self.install_or_upgrade_service
+            service, text="Install / Reinstall", command=self.install_or_upgrade_service
         )
         self.start_button = ttk.Button(
             service, text="Start", command=lambda: self.run_service_action("start")

@@ -86,7 +86,7 @@ hình Windows Service.
 
 1. Luân chuyển secret trong Keycloak qua kênh quản trị được phê duyệt.
 2. Mở Manager với quyền Administrator.
-3. Nhập secret mới và chọn **Install / upgrade**.
+3. Nhập secret mới và chọn **Install / Reinstall**.
 4. Chạy Diagnostics.
 5. Xác nhận request lấy token, heartbeat và claim đều thành công.
 

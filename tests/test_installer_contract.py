@@ -66,3 +66,12 @@ def test_installer_does_not_kill_its_own_process_tree() -> None:
     taskkill_lines = [line for line in script.splitlines() if "taskkill.exe" in line]
     assert taskkill_lines
     assert all(" /T " not in line for line in taskkill_lines)
+
+
+def test_manager_uses_reinstall_service_label() -> None:
+    manager_script = (
+        Path(__file__).parents[1] / "src" / "radar_agent" / "manager.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'text="Install / Reinstall"' in manager_script
+    assert "Install / upgrade" not in manager_script

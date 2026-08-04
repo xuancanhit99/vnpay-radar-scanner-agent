@@ -47,7 +47,7 @@ khởi tạo toàn bộ kết nối tới các dịch vụ từ xa.
 2. Kết nối thiết bị Android đã được cấp quyền hoặc khởi động emulator.
 3. Chạy `VNPAYRadarScannerAgent-Setup-<version>-x64.exe` với quyền Administrator.
 4. Mở **RADAR Scanner Manager** và nhập các giá trị phù hợp với môi trường.
-5. Chọn **Install / upgrade**, sau đó chạy toàn bộ kiểm tra trong tab **Diagnostics**.
+5. Chọn **Install / Reinstall**, sau đó chạy toàn bộ kiểm tra trong tab **Diagnostics**.
 
 Xem [Hướng dẫn cài đặt](docs/installation.md) để biết các điều kiện tiên quyết, cấu hình
 Keycloak, chế độ portable, quy trình nâng cấp và gỡ cài đặt.

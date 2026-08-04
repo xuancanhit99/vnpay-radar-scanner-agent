@@ -33,6 +33,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.7` đổi nhãn quản lý Windows Service thành **Install / Reinstall** để thể hiện đúng
+  thao tác cài mới hoặc đăng ký lại service; giữ nguyên bản sửa updater của `0.5.6`.
 - Bản `0.5.6` sửa nguyên nhân Setup bị đóng ngay sau khi tải xong: không còn dùng `taskkill /T`
   vì silent Setup là process con của Manager. Setup chỉ đóng các process Manager và tiếp tục nâng
   cấp service bình thường.

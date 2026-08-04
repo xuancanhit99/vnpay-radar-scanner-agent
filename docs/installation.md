@@ -48,7 +48,7 @@ tin nhắn, ticket, ảnh chụp màn hình, repository hoặc gói log.
    - Client ID và client secret
    - model thiết bị
 6. Chọn **Save configuration**.
-7. Chọn **Install / upgrade** trong tab Overview.
+7. Chọn **Install / Reinstall** trong tab Overview.
 8. Mở **Diagnostics** và xác nhận cả bốn phép kiểm tra đều thành công.
 
 Manager yêu cầu quyền nâng cao vì ứng dụng quản lý service cấp máy và secret DPAPI với scope

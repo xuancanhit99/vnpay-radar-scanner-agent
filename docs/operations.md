@@ -65,7 +65,7 @@ kết quả scanner.
 
 | Hiện tượng | Nguyên nhân có thể | Cách xử lý |
 | --- | --- | --- |
-| Service chưa được cài đặt | Manager chưa hoàn tất **Install / upgrade** | Lưu cấu hình, cài service với quyền Administrator rồi chạy lại Diagnostics. |
+| Service chưa được cài đặt | Manager chưa hoàn tất **Install / Reinstall** | Lưu cấu hình, cài service với quyền Administrator rồi chạy lại Diagnostics. |
 | Service khởi động rồi dừng | Thiếu/sai cấu hình, lỗi truy cập DPAPI hoặc giá trị vi phạm ràng buộc | Đọc service error log mới nhất; kiểm tra các đường dẫn trong ProgramData và cài lại bằng Manager. |
 | SSO trả `401` / `invalid_client` | Sai Client ID/secret, client bị tắt hoặc secret đã luân chuyển | Kiểm tra `vnpay-radar-agent`, cập nhật secret qua Manager rồi cài đặt/nâng cấp lại. |
 | RADAR trả `401` | Token hết hạn/không hợp lệ hoặc issuer không khớp | Xác nhận RADAR URL và realm của token cùng môi trường; Agent sẽ thử lại một lần với token mới. |
@@ -81,7 +81,7 @@ kết quả scanner.
 | Manager không kiểm tra được bản mới | Không truy cập được GitHub API, proxy chặn hoặc TLS lỗi | Kiểm tra HTTPS chiều đi tới `api.github.com` và `github.com`, sau đó chọn **Check again**. |
 | Tải update thất bại | Asset thiếu, vượt giới hạn hoặc SHA-256 không khớp | Không chạy file đã tải; kiểm tra GitHub Release và file `SHA256SUMS`, rồi thử lại. |
 | Service không start sau khi cài lại | Service registration cũ chưa được gỡ hoàn toàn hoặc worker thoát khi khởi động | Mở tab **Logs** và kiểm tra `VNPAYRadarScannerAgent.err.log` cùng `VNPAYRadarScannerAgent.wrapper.log`. Từ bản `0.5.4`, Setup tự dọn registration mồ côi và không xóa application files nếu uninstall service thất bại. |
-| Manager đóng sau khi tải update nhưng không mở lại | Setup cũ dùng `taskkill /T`, làm đóng cả process Setup được Manager khởi chạy | Cài thủ công bản `0.5.6` một lần. Các lần sau có thể dùng **Update now**; Setup chỉ đóng Manager, tiếp tục nâng cấp service và tự mở lại Manager. |
+| Manager đóng sau khi tải update nhưng không mở lại | Setup cũ dùng `taskkill /T`, làm đóng cả process Setup được Manager khởi chạy | Mở lại Manager và chạy **Update now** để tải bản `0.5.7` trở lên. Nếu Manager không mở được, cài Setup mới thủ công một lần. |
 
 ## Kiểm tra thiết bị trước khi chạy
 
