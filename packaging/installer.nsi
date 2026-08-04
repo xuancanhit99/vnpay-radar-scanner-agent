@@ -6,10 +6,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.5.4"
+  !define APP_VERSION "0.5.5"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.5.4.0"
+  !define APP_FILE_VERSION "0.5.5.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -55,6 +55,11 @@ SetCompressor /SOLID lzma
 
 Section "RADAR Scanner Agent" SEC_MAIN
   SetShellVarContext all
+  SetRegView 64
+  StrCpy $R7 "Setup did not complete."
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "installing"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" ""
   nsExec::ExecToStack 'taskkill.exe /IM "radar-scanner-manager.exe" /T /F'
   Pop $0
   Pop $1
@@ -76,7 +81,8 @@ stale_service_registration:
     Pop $1
     ${If} $0 != 0
     ${AndIf} $0 != 1072
-      Abort "Could not remove stale ${SERVICE_NAME} registration (sc.exe exit $0)."
+      StrCpy $R7 "Could not remove stale ${SERVICE_NAME} registration (sc.exe exit $0)."
+      Abort "$R7"
     ${EndIf}
     StrCpy $R8 "0"
 stale_service_wait:
@@ -89,7 +95,8 @@ stale_service_wait:
     ${EndIf}
     IntOp $R8 $R8 + 1
     ${If} $R8 >= 60
-      Abort "Timed out while removing stale ${SERVICE_NAME} registration. Restart Windows and run Setup again."
+      StrCpy $R7 "Timed out while removing stale ${SERVICE_NAME} registration. Restart Windows and run Setup again."
+      Abort "$R7"
     ${EndIf}
     Goto stale_service_wait
 
@@ -98,7 +105,8 @@ existing_service_ready:
     nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -Command "Stop-Service -Name ${SERVICE_NAME} -Force -ErrorAction Stop; (Get-Service -Name ${SERVICE_NAME}).WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(30))"'
     Pop $0
     ${If} $0 != 0
-      Abort "Could not stop ${SERVICE_NAME} for upgrade."
+      StrCpy $R7 "Could not stop ${SERVICE_NAME} for upgrade."
+      Abort "$R7"
     ${EndIf}
   ${EndIf}
 
@@ -128,15 +136,30 @@ service_precheck_complete:
     nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -Command "Start-Service -Name ${SERVICE_NAME} -ErrorAction Stop; (Get-Service -Name ${SERVICE_NAME}).WaitForStatus([ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))"'
     Pop $0
     ${If} $0 != 0
-      MessageBox MB_ICONSTOP "${SERVICE_NAME} could not be restarted. Check Windows Event Viewer and the Agent logs."
+      StrCpy $R7 "${SERVICE_NAME} could not be restarted. Check Windows Event Viewer and the Agent logs."
+      Abort "$R7"
     ${EndIf}
   ${EndIf}
 
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "success"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" "Installation completed successfully."
   IfSilent silent_update_relaunch interactive_install_finish
 silent_update_relaunch:
   Exec '"$INSTDIR\radar-scanner-manager.exe"'
 interactive_install_finish:
 SectionEnd
+
+Function .onInstFailed
+  SetRegView 64
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "failed"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" "$R7"
+  IfSilent 0 installer_failure_done
+  IfFileExists "$INSTDIR\radar-scanner-manager.exe" 0 installer_failure_done
+  Exec '"$INSTDIR\radar-scanner-manager.exe"'
+installer_failure_done:
+FunctionEnd
 
 Section "Uninstall"
   SetShellVarContext all

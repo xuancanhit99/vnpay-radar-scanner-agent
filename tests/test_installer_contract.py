@@ -36,3 +36,25 @@ def test_service_uninstall_waits_until_registration_is_removed() -> None:
 
     assert "function Wait-ServiceRemoval" in script
     assert "Wait-ServiceRemoval -Name $serviceName" in script
+
+
+def test_silent_installer_records_result_and_reopens_manager_on_failure() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    assert '"LastUpdateState" "installing"' in script
+    assert '"LastUpdateState" "success"' in script
+    assert "Function .onInstFailed" in script
+    assert '"LastUpdateState" "failed"' in script
+    assert "IfSilent 0 installer_failure_done" in script
+    assert "Exec '\"$INSTDIR\\radar-scanner-manager.exe\"'" in script
+
+
+def test_manager_waits_for_installer_to_close_it() -> None:
+    manager_script = (
+        Path(__file__).parents[1] / "src" / "radar_agent" / "manager.py"
+    ).read_text(encoding="utf-8")
+    method = manager_script.split("def _launch_downloaded_update", maxsplit=1)[1]
+    method = method.split("\n    def ", maxsplit=1)[0]
+
+    assert "launch_installer(installer)" in method
+    assert "self.destroy" not in method

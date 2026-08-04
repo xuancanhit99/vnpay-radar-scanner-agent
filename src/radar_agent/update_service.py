@@ -32,6 +32,36 @@ class UpdateInfo:
     sha256: str
 
 
+@dataclass(frozen=True)
+class InstallerStatus:
+    state: str
+    version: str
+    message: str
+
+
+def read_installer_status() -> InstallerStatus | None:
+    if os.name != "nt":
+        return None
+    try:
+        import winreg
+
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"Software\VNPAY\RadarScannerAgent",
+        ) as key:
+            state = str(winreg.QueryValueEx(key, "LastUpdateState")[0]).strip().lower()
+            version = str(winreg.QueryValueEx(key, "LastUpdateVersion")[0]).strip()
+            try:
+                message = str(winreg.QueryValueEx(key, "LastUpdateMessage")[0]).strip()
+            except FileNotFoundError:
+                message = ""
+    except (FileNotFoundError, OSError):
+        return None
+    if state not in {"installing", "success", "failed"}:
+        return None
+    return InstallerStatus(state=state, version=version, message=message)
+
+
 def _parse_version(value: str) -> tuple[int, int, int]:
     match = _VERSION_PATTERN.fullmatch(value.strip())
     if not match:

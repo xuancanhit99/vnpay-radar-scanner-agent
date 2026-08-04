@@ -33,10 +33,12 @@ from radar_agent.service_control import (
 )
 from radar_agent.settings import AgentSettings
 from radar_agent.update_service import (
+    InstallerStatus,
     UpdateInfo,
     check_for_update,
     download_installer,
     launch_installer,
+    read_installer_status,
 )
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -65,9 +67,13 @@ class ManagerWindow(tk.Tk):
         self._load_form()
         self.refresh_status()
         self.refresh_logs()
+        installer_status = read_installer_status()
+        self._show_installer_status(installer_status)
         self.protocol("WM_DELETE_WINDOW", self._close_window)
         self.after(500, self._drain_process_output)
-        self.after(1200, lambda: self.check_for_updates(silent=True))
+        if installer_status is None or installer_status.state == "success":
+            delay = 5000 if installer_status else 1200
+            self.after(delay, lambda: self.check_for_updates(silent=True))
         self.after(4000, self._status_tick)
 
     def _configure_style(self) -> None:
@@ -168,6 +174,8 @@ class ManagerWindow(tk.Tk):
             update,
             textvariable=self.update_status,
             style="Status.TLabel",
+            justify=tk.LEFT,
+            wraplength=620,
         )
         self.update_status_label.grid(row=0, column=0, sticky=tk.W, padx=(0, 16))
         self.check_update_button = ttk.Button(
@@ -525,6 +533,27 @@ class ManagerWindow(tk.Tk):
         if not silent:
             messagebox.showerror("Software update", error, parent=self)
 
+    def _show_installer_status(self, status: InstallerStatus | None) -> None:
+        if status is None:
+            return
+        version = status.version or "unknown"
+        if status.state == "success" and version == __version__:
+            self.update_status.set(f"Updated successfully to version {version}")
+            self.update_status_label.configure(style="Success.TLabel")
+            return
+        if status.state == "failed":
+            detail = f": {status.message}" if status.message else ""
+            self.update_status.set(f"Update to version {version} failed{detail}")
+        elif status.state == "installing":
+            self.update_status.set(
+                f"Update to version {version} did not complete. Run the installer again."
+            )
+        else:
+            self.update_status.set(
+                f"Setup reported version {version}, but Manager is version {__version__}"
+            )
+        self.update_status_label.configure(style="Error.TLabel")
+
     def install_available_update(self) -> None:
         update = self._available_update
         if update is None or self._update_install_running:
@@ -579,12 +608,13 @@ class ManagerWindow(tk.Tk):
         try:
             if self._direct_process is not None and self._direct_process.poll() is None:
                 self.stop_direct()
+            self.update_status.set("Waiting for Administrator approval...")
+            self.update_idletasks()
             launch_installer(installer)
         except Exception as exc:
             self._update_download_failed(str(exc))
             return
-        self.update_status.set("Starting installer...")
-        self.after(400, self.destroy)
+        self.update_status.set("Installer started. Manager will close automatically...")
 
     def _run_operation(self, operation, *, title: str, success_message: str) -> None:
         if self._operation_running:

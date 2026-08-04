@@ -1,15 +1,36 @@
 import hashlib
+import sys
+from contextlib import nullcontext
 
 import httpx
 import pytest
 
 from radar_agent import update_service
+from radar_agent.manager import ManagerWindow
 from radar_agent.update_service import (
+    InstallerStatus,
     UpdateError,
     check_for_update,
     download_installer,
     launch_installer,
+    read_installer_status,
 )
+
+
+class _StringValue:
+    def __init__(self) -> None:
+        self.value = ""
+
+    def set(self, value: str) -> None:
+        self.value = value
+
+
+class _StatusLabel:
+    def __init__(self) -> None:
+        self.style = ""
+
+    def configure(self, *, style: str) -> None:
+        self.style = style
 
 
 def _release_payload(version: str, installer: bytes) -> dict:
@@ -145,3 +166,51 @@ def test_launch_installer_reports_windows_shell_error(tmp_path, monkeypatch) -> 
 
     with pytest.raises(UpdateError, match="Windows error 5"):
         launch_installer(installer)
+
+
+def test_read_installer_status_from_windows_registry(monkeypatch) -> None:
+    values = {
+        "LastUpdateState": "failed",
+        "LastUpdateVersion": "0.5.5",
+        "LastUpdateMessage": "Service could not be restarted.",
+    }
+    fake_winreg = type(
+        "FakeWinreg",
+        (),
+        {
+            "HKEY_LOCAL_MACHINE": object(),
+            "OpenKey": staticmethod(lambda *_args: nullcontext(object())),
+            "QueryValueEx": staticmethod(lambda _key, name: (values[name], 1)),
+        },
+    )
+    monkeypatch.setattr(update_service.os, "name", "nt")
+    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
+
+    status = read_installer_status()
+
+    assert status is not None
+    assert status.state == "failed"
+    assert status.version == "0.5.5"
+    assert status.message == "Service could not be restarted."
+
+
+def test_manager_shows_failed_installer_status() -> None:
+    window = type(
+        "Window",
+        (),
+        {"update_status": _StringValue(), "update_status_label": _StatusLabel()},
+    )()
+
+    ManagerWindow._show_installer_status(
+        window,
+        InstallerStatus(
+            state="failed",
+            version="0.5.5",
+            message="Service could not be restarted.",
+        ),
+    )
+
+    assert window.update_status.value == (
+        "Update to version 0.5.5 failed: Service could not be restarted."
+    )
+    assert window.update_status_label.style == "Error.TLabel"

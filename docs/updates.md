@@ -33,6 +33,9 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.5` giữ Manager mở trong lúc chờ UAC, ghi kết quả Setup vào Registry và tự mở lại
+  Manager khi silent update thất bại. Màn hình **Software update** hiển thị rõ trạng thái sau khi
+  cài đặt thay vì đóng mà không có phản hồi.
 - Bản `0.5.4` sửa luồng uninstall/reinstall: chờ service được xóa hoàn toàn, giữ nguyên
   application files nếu uninstall service thất bại và tự dọn service registration mồ côi khi
   chạy Setup mới.
