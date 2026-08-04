@@ -210,3 +210,48 @@ async def test_heartbeat_allows_usb_debug_testcase_over_wifi_when_cable_is_conne
     assert payload["device_serial"] == "192.0.2.10:5555"
     assert status["ready"] is True
     assert status["reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_allows_usb_debug_with_legacy_scanner_over_wifi() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"busy": False})
+        if request.url.path == "/device":
+            return httpx.Response(
+                200,
+                json={
+                    "usb": {"online": False, "serial": "314ebbfe"},
+                    "wifi": {"online": True, "serial": "192.168.137.198:5555"},
+                    "emulator": {"online": False, "serial": "emulator-5554"},
+                },
+            )
+        if request.url.path == "/testcases":
+            return httpx.Response(
+                200,
+                json={
+                    "testcases": [
+                        {
+                            "sectionId": "TC-MOBI-13",
+                            "name": "Check USB Debug",
+                            "device": "314ebbfe",
+                            "timeout_seconds": 360,
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        payload = await ScannerClient(settings, client).heartbeat_payload(
+            hostname="WINDOWS-LAB",
+            version="0.5.3",
+        )
+
+    status = payload["capability_statuses"][0]
+    assert payload["device_status"] == "connected"
+    assert payload["device_serial"] == "192.168.137.198:5555"
+    assert status["device_type"] == "main_usb"
+    assert status["ready"] is True
+    assert status["reason"] is None

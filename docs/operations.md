@@ -133,7 +133,8 @@ Sau khi Setup hoàn tất:
 
 - Mỗi thời điểm chỉ chạy một job.
 - Readiness chỉ phản ánh scanner/thiết bị chính, USB hoặc emulator. Điều kiện chuyên biệt như
-  Frida Server và quyền overlay vẫn được APK Scanner kiểm tra khi bắt đầu job.
+  cáp vật lý trên Scanner API cũ, Frida Server và quyền overlay vẫn được APK Scanner kiểm tra
+  khi bắt đầu job.
 - Agent ghi nhận yêu cầu hủy khi gia hạn lease nhưng chưa ngắt request HTTP cục bộ đang chạy.
 - Bản build phát triển chưa được ký số cho tới khi bổ sung code signing vào CI.
 - Auto-update yêu cầu HTTPS chiều đi tới GitHub và chỉ hỗ trợ package Windows đã cài bằng Setup.

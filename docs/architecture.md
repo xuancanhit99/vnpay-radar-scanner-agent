@@ -124,8 +124,9 @@ job hoặc log.
 - Capability được lấy động từ `GET /testcases` của APK Scanner. Bản hiện tại hỗ trợ
   `TC-MOBI-2`, `TC-MOBI-3`, `TC-MOBI-4`, `TC-MOBI-12`, `TC-MOBI-13`.
 - Heartbeat báo readiness riêng cho từng testcase; USB, thiết bị chính và emulator được đánh giá
-  độc lập. `TC-MOBI-13` yêu cầu cáp vật lý nhưng không yêu cầu USB ADB phải online từ trước:
-  khi `adbhide` đang bật, Agent có thể điều khiển qua Wi-Fi và APK Scanner tự chuyển sang USB.
+  độc lập. `TC-MOBI-13` không yêu cầu USB ADB phải online từ trước: khi `adbhide` đang bật,
+  Agent có thể điều khiển qua Wi-Fi và APK Scanner tự kiểm tra cáp rồi chuyển sang USB. Với
+  Scanner API cũ chưa trả trạng thái cáp, Agent chỉ precheck có USB hoặc Wi-Fi đang online.
 - Mức đồng thời: một job cho mỗi tiến trình Agent.
 - Không chạy worker trực tiếp và Windows Service cùng lúc trên một máy.
 - Yêu cầu hủy job từ RADAR được ghi nhận khi gia hạn lease, nhưng request đang chạy tới scanner
