@@ -3,7 +3,9 @@
 Worker biên chạy trên Windows dành cho VNPAY RADAR. Agent chủ động lấy các job quét APK từ
 RADAR Backend, giao việc thực thi cho `apk-scan-api` cục bộ và gửi kết quả về qua HTTPS.
 
-Phiên bản hiện tại hỗ trợ chạy một job tại một thời điểm và capability `TC-MOBI-3`.
+Phiên bản hiện tại hỗ trợ chạy một job tại một thời điểm. Agent lấy catalog động từ APK Scanner,
+quảng bá `TC-MOBI-2`, `TC-MOBI-3`, `TC-MOBI-4`, `TC-MOBI-12`, `TC-MOBI-13` và báo readiness
+riêng cho từng testcase theo trạng thái thiết bị vật lý, USB hoặc emulator.
 
 Phiên bản phát hành dùng Semantic Versioning. Có thể kiểm tra phiên bản tại tab **Overview**
 của Scanner Manager, heartbeat trên RADAR, hoặc mục Apps & features của Windows. Từ phiên bản

@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -20,8 +22,25 @@ async def test_diagnostics_checks_sso_scanner_device_and_radar(tmp_path) -> None
                 200,
                 json={"usb": {"online": True, "serial": "xiaomi-001"}},
             )
+        if str(request.url) == "http://scanner.local/testcases":
+            return httpx.Response(
+                200,
+                json={
+                    "testcases": [
+                        {
+                            "sectionId": "TC-MOBI-3",
+                            "name": "Check Debugger",
+                            "device_type": "main",
+                            "timeout_seconds": 120,
+                        }
+                    ]
+                },
+            )
         if str(request.url) == "https://radar.example/internal/scanner/agents/heartbeat":
             assert request.headers["authorization"] == "Bearer token-1"
+            heartbeat = json.loads(request.content)
+            assert heartbeat["capabilities"] == ["TC-MOBI-3"]
+            assert heartbeat["capability_statuses"][0]["ready"] is True
             return httpx.Response(200, json={"id": "windows-lab-02"})
         return httpx.Response(404)
 
@@ -42,7 +61,7 @@ async def test_diagnostics_checks_sso_scanner_device_and_radar(tmp_path) -> None
 
     assert [result.key for result in results] == ["sso", "scanner", "device", "radar"]
     assert all(result.success for result in results)
-    assert len(requests) == 6
+    assert len(requests) == 7
 
 
 @pytest.mark.asyncio

@@ -89,7 +89,8 @@ Trước khi tạo job thật:
 2. Xác nhận package mục tiêu đã được cài.
 3. Xác nhận APK Scanner báo `ready`.
 4. Chạy Diagnostics trong Manager.
-5. Gửi một job `TC-MOBI-3` và theo dõi toàn bộ vòng đời.
+5. Chọn một testcase đang báo sẵn sàng trên RADAR và theo dõi toàn bộ vòng đời.
+6. Với `TC-MOBI-13`, xác nhận cáp USB còn kết nối và chạy testcase này cuối đợt kiểm thử.
 
 Không kiểm thử trên thiết bị cá nhân hoặc tài khoản ứng dụng cá nhân, trừ khi kế hoạch kiểm thử
 cho phép rõ ràng.
@@ -131,7 +132,8 @@ Sau khi Setup hoàn tất:
 ## Giới hạn vận hành đã biết
 
 - Mỗi thời điểm chỉ chạy một job.
-- Chỉ quảng bá capability `TC-MOBI-3`.
+- Readiness chỉ phản ánh scanner/thiết bị chính, USB hoặc emulator. Điều kiện chuyên biệt như
+  Frida Server và quyền overlay vẫn được APK Scanner kiểm tra khi bắt đầu job.
 - Agent ghi nhận yêu cầu hủy khi gia hạn lease nhưng chưa ngắt request HTTP cục bộ đang chạy.
 - Bản build phát triển chưa được ký số cho tới khi bổ sung code signing vào CI.
 - Auto-update yêu cầu HTTPS chiều đi tới GitHub và chỉ hỗ trợ package Windows đã cài bằng Setup.

@@ -121,14 +121,18 @@ job hoặc log.
 
 ## Khả năng và giới hạn hiện tại
 
-- Capability được hỗ trợ: `TC-MOBI-3`.
+- Capability được lấy động từ `GET /testcases` của APK Scanner. Bản hiện tại hỗ trợ
+  `TC-MOBI-2`, `TC-MOBI-3`, `TC-MOBI-4`, `TC-MOBI-12`, `TC-MOBI-13`.
+- Heartbeat báo readiness riêng cho từng testcase; USB, thiết bị chính và emulator được đánh giá
+  độc lập.
 - Mức đồng thời: một job cho mỗi tiến trình Agent.
 - Không chạy worker trực tiếp và Windows Service cùng lúc trên một máy.
 - Yêu cầu hủy job từ RADAR được ghi nhận khi gia hạn lease, nhưng request đang chạy tới scanner
   hiện chưa bị ngắt.
 - Phiên bản Agent hiện tại chưa triển khai upload evidence. Phản hồi từ scanner được gửi dưới
   dạng kết quả có cấu trúc.
-- Trạng thái APK Scanner và kết nối thiết bị được báo cáo độc lập trong mỗi heartbeat.
+- Trạng thái APK Scanner, kết nối thiết bị và readiness từng testcase được báo cáo độc lập trong
+  mỗi heartbeat.
 
 Mọi capability testcase mới đều cần thay đổi đồng bộ ở APK Scanner, ánh xạ payload của Agent,
 validation của RADAR Backend, giao diện và contract test.
