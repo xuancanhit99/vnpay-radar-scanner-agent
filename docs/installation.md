@@ -94,8 +94,9 @@ Quá trình khởi động khỏe mạnh có request thành công tới:
 
 Từ phiên bản `0.4.0`, tab **Overview** tự kiểm tra GitHub Releases khi Manager khởi động. Khi
 có bản mới, chọn **Update now**, xác nhận nâng cấp và chờ Manager tải, kiểm tra SHA-256 rồi chạy
-Setup. Xác nhận hộp thoại UAC để cấp quyền Administrator. Manager sẽ đóng; mở lại sau khi Setup
-hoàn tất.
+Setup. Xác nhận hộp thoại UAC để cấp quyền Administrator. Manager sẽ đóng trong lúc thay file và
+tự mở lại bằng phiên bản mới sau khi Setup hoàn tất. Riêng bản `0.5.0` cần mở lại Manager thủ công
+sau khi nâng cấp; hành vi tự mở lại áp dụng từ `0.5.1`.
 
 Máy đang dùng phiên bản cũ hơn `0.4.0` cần cài Setup `0.4.0` thủ công một lần. Có thể tiếp tục
 nâng cấp thủ công bằng cách chạy file Setup phiên bản mới hơn với quyền Administrator.

@@ -15,6 +15,7 @@ Khi xác nhận cập nhật, Manager thực hiện:
 5. Dừng direct process nếu đang chạy, yêu cầu quyền Administrator qua UAC, khởi chạy Setup ở
    chế độ silent rồi đóng Manager.
 6. Setup dừng/khởi động lại Windows Service và giữ nguyên cấu hình, DPAPI secret, log, outbox.
+7. Sau khi nâng cấp thành công, Setup tự mở lại Scanner Manager bằng phiên bản mới.
 
 File `.partial` bị xóa nếu tải lỗi, vượt giới hạn hoặc checksum không khớp. Manager không chạy
 artifact không đạt kiểm tra.
@@ -33,6 +34,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 ## Bootstrap và rollback
 
 - Các bản trước `0.4.0` không có updater, vì vậy phải cài `0.4.0` thủ công một lần.
+- Bản `0.5.0` nâng cấp thành công nhưng không tự mở lại Manager. Từ `0.5.1`, silent update tự
+  relaunch Manager sau khi service đã chạy lại.
 - Auto-update chỉ chọn release mới hơn; không tự downgrade.
 - Khi cần rollback, tải Setup version đã phê duyệt, kiểm tra checksum và chạy thủ công.
 - Artifact hiện chưa ký Authenticode. Trước production cần bổ sung ký số và xác minh signer trong

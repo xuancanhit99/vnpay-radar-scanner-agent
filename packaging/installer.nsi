@@ -6,10 +6,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.5.0"
+  !define APP_VERSION "0.5.1"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.5.0.0"
+  !define APP_FILE_VERSION "0.5.1.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -100,6 +100,11 @@ Section "RADAR Scanner Agent" SEC_MAIN
       MessageBox MB_ICONSTOP "${SERVICE_NAME} could not be restarted. Check Windows Event Viewer and the Agent logs."
     ${EndIf}
   ${EndIf}
+
+  IfSilent silent_update_relaunch interactive_install_finish
+silent_update_relaunch:
+  Exec '"$INSTDIR\radar-scanner-manager.exe"'
+interactive_install_finish:
 SectionEnd
 
 Section "Uninstall"
