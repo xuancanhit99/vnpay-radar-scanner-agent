@@ -64,7 +64,12 @@ def service_action(action: str) -> str:
         timeout=40,
     )
     if result.returncode != 0:
-        raise RuntimeError((result.stderr or result.stdout).strip())
+        detail = (result.stderr or result.stdout).strip()
+        error_log = service_log_path()
+        wrapper_log = error_log.with_name(f"{SERVICE_NAME}.wrapper.log")
+        raise RuntimeError(
+            f"{detail}\n\nAgent logs:\n- {error_log}\n- {wrapper_log}"
+        )
     return result.stdout.strip()
 
 

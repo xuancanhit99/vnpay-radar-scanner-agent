@@ -33,6 +33,9 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.4` sửa luồng uninstall/reinstall: chờ service được xóa hoàn toàn, giữ nguyên
+  application files nếu uninstall service thất bại và tự dọn service registration mồ côi khi
+  chạy Setup mới.
 - Bản `0.5.2` sửa readiness của `TC-MOBI-13`: cáp USB đang cắm và kênh ADB Wi-Fi online là
   đủ để scanner tự chuyển sang USB khi bắt đầu testcase.
 - Các bản trước `0.4.0` không có updater, vì vậy phải cài `0.4.0` thủ công một lần.

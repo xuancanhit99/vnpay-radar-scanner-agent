@@ -80,6 +80,7 @@ kết quả scanner.
 | Setup không thể thay thế file | Service/tiến trình hiện tại vẫn đang giữ file thực thi | Dùng Setup 0.3.1 trở lên để tự động đóng Manager và dừng/khởi động lại service. |
 | Manager không kiểm tra được bản mới | Không truy cập được GitHub API, proxy chặn hoặc TLS lỗi | Kiểm tra HTTPS chiều đi tới `api.github.com` và `github.com`, sau đó chọn **Check again**. |
 | Tải update thất bại | Asset thiếu, vượt giới hạn hoặc SHA-256 không khớp | Không chạy file đã tải; kiểm tra GitHub Release và file `SHA256SUMS`, rồi thử lại. |
+| Service không start sau khi cài lại | Service registration cũ chưa được gỡ hoàn toàn hoặc worker thoát khi khởi động | Mở tab **Logs** và kiểm tra `VNPAYRadarScannerAgent.err.log` cùng `VNPAYRadarScannerAgent.wrapper.log`. Từ bản `0.5.4`, Setup tự dọn registration mồ côi và không xóa application files nếu uninstall service thất bại. |
 
 ## Kiểm tra thiết bị trước khi chạy
 

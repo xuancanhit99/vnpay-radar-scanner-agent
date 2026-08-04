@@ -29,3 +29,24 @@ def test_query_service_reports_missing_service(monkeypatch) -> None:
 
     assert state.installed is False
     assert state.status == "not-installed"
+
+
+def test_service_action_error_includes_agent_log_paths(monkeypatch) -> None:
+    result = subprocess.CompletedProcess(
+        args=[],
+        returncode=1,
+        stdout="",
+        stderr="Cannot start service",
+    )
+    monkeypatch.setattr(service_control, "_run", lambda *_args, **_kwargs: result)
+
+    try:
+        service_control.service_action("start")
+    except RuntimeError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("service_action should report the failed command")
+
+    assert "Cannot start service" in message
+    assert "VNPAYRadarScannerAgent.err.log" in message
+    assert "VNPAYRadarScannerAgent.wrapper.log" in message
