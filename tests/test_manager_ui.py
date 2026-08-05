@@ -3,6 +3,7 @@ import os
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCheckBox, QHeaderView
 
+from radar_agent import manager as manager_module
 from radar_agent.desktop_theme import (
     branding_asset_path,
     configure_radar_theme,
@@ -51,16 +52,55 @@ def test_update_lock_disables_navigation_and_shows_progress(tmp_path, monkeypatc
         window._set_interaction_locked(True, "Downloading Scanner Agent")
         application.processEvents()
 
-        assert window.busy_banner.isVisible() is False  # Parent window is not shown in unit tests.
-        assert window.busy_banner.isHidden() is False
-        assert window.busy_status.text() == "Downloading Scanner Agent"
+        assert window.update_status_label.text() == "Downloading Scanner Agent"
+        assert window.update_progress_bar.isHidden() is False
+        assert window.update_progress_bar.minimum() == 0
+        assert window.update_progress_bar.maximum() == 0
         assert window.sidebar.isEnabled() is False
         assert window.page_stack.isEnabled() is False
 
+        window._show_update_progress("Downloading Scanner Agent 0.7.5 · 94%", 94)
+        assert window.update_progress_bar.maximum() == 100
+        assert window.update_progress_bar.value() == 94
+
         window._set_interaction_locked(False)
+        assert window.update_progress_bar.isHidden()
         assert window.sidebar.isEnabled() is True
         assert window.page_stack.isEnabled() is True
     finally:
+        window._exiting = True
+        window.close()
+
+
+def test_update_handoff_keeps_inline_progress_visible(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RADAR_AGENT_MANAGER_CONFIG", str(tmp_path / ".env"))
+    application = _application()
+    window = ManagerWindow(start_background_tasks=False)
+    installer = tmp_path / "setup.exe"
+    installer.write_bytes(b"setup")
+    updater = tmp_path / "radar-scanner-updater.exe"
+    updater.write_bytes(b"updater")
+    launched: list[tuple[object, object, str]] = []
+    monkeypatch.setattr(
+        manager_module,
+        "launch_updater",
+        lambda updater_path, installer_path, version: launched.append(
+            (updater_path, installer_path, version)
+        ),
+    )
+    window._package_root = tmp_path
+
+    try:
+        window._set_interaction_locked(True, "Preparing update")
+        window._launch_downloaded_update(installer, "0.7.5")
+
+        assert launched == [(updater, installer, "0.7.5")]
+        assert window.update_progress_bar.isHidden() is False
+        assert window.update_progress_bar.maximum() == 0
+        assert window.update_status_label.text().startswith("Updater started")
+        application.processEvents()
+    finally:
+        window._interaction_locked = False
         window._exiting = True
         window.close()
 
@@ -70,10 +110,10 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     application = _application()
     window = ManagerWindow(start_background_tasks=False)
 
-    current = UpdateInfo("0.7.4", "0.7.4", False, "", "", "", "")
+    current = UpdateInfo("0.7.5", "0.7.5", False, "", "", "", "")
     available = UpdateInfo(
-        "0.7.4",
         "0.7.5",
+        "0.7.6",
         True,
         "https://github.com/example/release",
         "setup.exe",

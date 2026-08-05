@@ -122,11 +122,6 @@ QFrame#Panel {{
     border: 1px solid {BORDER};
     border-radius: 8px;
 }}
-QFrame#InfoBanner {{
-    background: {BLUE_TINT};
-    border: 1px solid #B9D7ED;
-    border-radius: 6px;
-}}
 QFrame#SuccessBanner {{
     background: {GREEN_TINT};
     border: 1px solid #A9DCC8;

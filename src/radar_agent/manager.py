@@ -290,21 +290,6 @@ class ManagerWindow(QMainWindow):
         content_layout.setContentsMargins(24, 18, 24, 24)
         content_layout.setSpacing(14)
 
-        self.busy_banner = QFrame()
-        self.busy_banner.setObjectName("InfoBanner")
-        busy_layout = QVBoxLayout(self.busy_banner)
-        busy_layout.setContentsMargins(14, 10, 14, 10)
-        busy_layout.setSpacing(6)
-        self.busy_status = QLabel()
-        self.busy_status.setObjectName("StatusBusy")
-        self.busy_progress = QProgressBar()
-        self.busy_progress.setTextVisible(False)
-        self.busy_progress.setRange(0, 0)
-        busy_layout.addWidget(self.busy_status)
-        busy_layout.addWidget(self.busy_progress)
-        self.busy_banner.hide()
-        content_layout.addWidget(self.busy_banner)
-
         self.page_stack = QStackedWidget()
         self.overview_page = self._build_overview_page()
         self.configuration_page = self._build_configuration_page()
@@ -406,6 +391,12 @@ class ManagerWindow(QMainWindow):
         update_row.addWidget(self.check_update_button)
         update_row.addWidget(self.install_update_button)
         update_layout.addLayout(update_row)
+        self.update_progress_bar = QProgressBar()
+        self.update_progress_bar.setTextVisible(False)
+        self.update_progress_bar.setRange(0, 100)
+        self.update_progress_bar.setValue(0)
+        self.update_progress_bar.hide()
+        update_layout.addWidget(self.update_progress_bar)
         body_layout.addWidget(update)
 
         service, service_layout = self._panel(
@@ -845,12 +836,15 @@ class ManagerWindow(QMainWindow):
         self.page_stack.setEnabled(not locked)
         if locked:
             self.setCursor(Qt.CursorShape.WaitCursor)
-            self.busy_status.setText(message)
-            self.busy_progress.setRange(0, 0)
-            self.busy_banner.show()
+            self.update_status_label.setText(message)
+            self._set_label_tone(self.update_status_label, "busy")
+            self.update_progress_bar.setRange(0, 0)
+            self.update_progress_bar.show()
         else:
             self.unsetCursor()
-            self.busy_banner.hide()
+            self.update_progress_bar.hide()
+            self.update_progress_bar.setRange(0, 100)
+            self.update_progress_bar.setValue(0)
             self.refresh_status()
 
     def check_for_updates(self, *, silent: bool = False) -> None:
@@ -968,12 +962,11 @@ class ManagerWindow(QMainWindow):
     @Slot(str, int)
     def _show_update_progress(self, message: str, percent: int = -1) -> None:
         self.update_status_label.setText(message)
-        self.busy_status.setText(message)
         if percent >= 0:
-            self.busy_progress.setRange(0, 100)
-            self.busy_progress.setValue(percent)
+            self.update_progress_bar.setRange(0, 100)
+            self.update_progress_bar.setValue(percent)
         else:
-            self.busy_progress.setRange(0, 0)
+            self.update_progress_bar.setRange(0, 0)
 
     def _update_download_failed(self, error: str) -> None:
         self._update_install_running = False
@@ -990,8 +983,7 @@ class ManagerWindow(QMainWindow):
             if self._direct_process is not None and self._direct_process.poll() is None:
                 self.stop_direct()
             self.update_status_label.setText("Starting update progress window...")
-            self.busy_status.setText("Starting update installer")
-            self.busy_progress.setRange(0, 0)
+            self.update_progress_bar.setRange(0, 0)
             updater = self._package_root / "radar-scanner-updater.exe"
             if updater.is_file():
                 launch_updater(updater, installer, target_version)
@@ -1003,7 +995,6 @@ class ManagerWindow(QMainWindow):
         self.update_status_label.setText(
             "Updater started. Manager will close during installation..."
         )
-        self.busy_status.setText("Installer is preparing the upgrade")
 
     def _run_operation(
         self,

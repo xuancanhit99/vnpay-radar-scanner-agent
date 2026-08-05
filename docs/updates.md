@@ -35,6 +35,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.5` chuyển trạng thái và progress bar tải bản cập nhật vào card **Software update**,
+  loại bỏ banner trùng lặp phía trên nội dung nhưng vẫn khóa thao tác trong suốt quá trình.
 - Bản `0.7.4` thay toàn bộ icon vẽ tay bằng bộ nhận diện RADAR/VNPAY chính thức cho Manager,
   Updater, system tray, executable, installer, shortcut và danh sách ứng dụng Windows.
 - Bản `0.7.3` cân đối lại chiều rộng các cột Diagnostics, giữ cột Detail co giãn và căn phải
