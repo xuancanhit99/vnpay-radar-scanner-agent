@@ -52,7 +52,13 @@ from PySide6.QtWidgets import (
 
 from radar_agent import __version__
 from radar_agent.config_store import load_settings, plaintext_bootstrap, save_settings
-from radar_agent.desktop_shell import SingleInstance, TrayController, focus_existing_manager
+from radar_agent.desktop_shell import (
+    MANAGER_APP_USER_MODEL_ID,
+    SingleInstance,
+    TrayController,
+    focus_existing_manager,
+    set_windows_app_user_model_id,
+)
 from radar_agent.desktop_theme import (
     BLUE_BRIGHT,
     GREEN,
@@ -1389,6 +1395,7 @@ class ManagerWindow(QMainWindow):
 
 
 def main() -> None:
+    set_windows_app_user_model_id(MANAGER_APP_USER_MODEL_ID)
     instance = SingleInstance()
     if not instance.acquire():
         focus_existing_manager()

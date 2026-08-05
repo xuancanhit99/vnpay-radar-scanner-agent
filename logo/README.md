@@ -1,7 +1,8 @@
 # Bộ nhận diện ứng dụng Windows
 
-- `icon.svg`: nguồn icon RADAR dùng trong Manager, Updater và system tray.
-- `icon.ico`: bản đa kích thước dùng cho executable, Setup và Uninstall trên Windows.
+- `icon.svg`: nguồn vector RADAR dùng để hiển thị trong nội dung giao diện.
+- `icon.ico`: bản đa kích thước dùng cho Manager, Updater, system tray, executable,
+  shortcut, Setup và Uninstall trên Windows.
 - `logo.svg`: VNPAY wordmark dùng trong footer Manager và header Updater.
 - `vnpay-logo.jpg`: tài sản tham chiếu gốc; không đóng gói vào ứng dụng vì có nền trắng và tỷ lệ
   không phù hợp với giao diện desktop.

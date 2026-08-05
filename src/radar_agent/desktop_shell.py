@@ -9,6 +9,21 @@ _SW_SHOW = 5
 _SW_RESTORE = 9
 _MUTEX_NAME = r"Local\VNPAYRadarScannerManager"
 _WINDOW_TITLE_PREFIX = "VNPAY RADAR Scanner Manager"
+MANAGER_APP_USER_MODEL_ID = "VNPAY.RADAR.ScannerManager"
+UPDATER_APP_USER_MODEL_ID = "VNPAY.RADAR.ScannerUpdater"
+
+
+def set_windows_app_user_model_id(app_id: str) -> None:
+    """Give Windows Shell a stable identity before any desktop window is created."""
+    if os.name != "nt":
+        return
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    setter = shell32.SetCurrentProcessExplicitAppUserModelID
+    setter.argtypes = [ctypes.c_wchar_p]
+    setter.restype = ctypes.c_long
+    result = setter(app_id)
+    if result != 0:
+        raise OSError(result, f"Could not set AppUserModelID to {app_id}")
 
 
 class SingleInstance:

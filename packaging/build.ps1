@@ -114,6 +114,8 @@ try {
     Copy-Item -LiteralPath $agentDirectory -Destination (Join-Path $bundleDirectory "agent") -Recurse
     Copy-Item -LiteralPath $managerExecutable -Destination $bundleDirectory
     Copy-Item -LiteralPath $updaterExecutable -Destination $bundleDirectory
+    Copy-Item -LiteralPath $brandIcon `
+        -Destination (Join-Path $bundleDirectory "radar-scanner.ico") -Force
 
     if (-not (Test-Path -LiteralPath $winSwDownload)) {
         Invoke-WebRequest -Uri $winSwUrl -OutFile $winSwDownload

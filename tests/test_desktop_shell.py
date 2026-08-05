@@ -1,5 +1,6 @@
 import os
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -29,3 +30,12 @@ def test_single_instance_releases_named_mutex() -> None:
         first.close()
         duplicate.close()
         replacement.close()
+
+
+def test_desktop_entrypoints_set_shell_identity_before_qt_application() -> None:
+    source_root = Path(__file__).parents[1] / "src" / "radar_agent"
+
+    for entrypoint in ("manager.py", "updater.py"):
+        source = (source_root / entrypoint).read_text(encoding="utf-8")
+        main = source.split("def main() -> None:", maxsplit=1)[1]
+        assert main.index("set_windows_app_user_model_id(") < main.index("QApplication(")

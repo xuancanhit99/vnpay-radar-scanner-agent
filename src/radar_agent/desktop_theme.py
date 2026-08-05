@@ -298,6 +298,9 @@ def _svg_pixmap(name: str, width: int, height: int) -> QPixmap:
 
 
 def radar_icon(size: int = 64) -> QIcon:
+    icon = QIcon(str(branding_asset_path("icon.ico")))
+    if not icon.isNull():
+        return icon
     return QIcon(_svg_pixmap("icon.svg", size, size))
 
 

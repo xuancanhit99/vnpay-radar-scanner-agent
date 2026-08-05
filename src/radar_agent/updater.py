@@ -24,6 +24,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from radar_agent.desktop_shell import (
+    UPDATER_APP_USER_MODEL_ID,
+    set_windows_app_user_model_id,
+)
 from radar_agent.desktop_theme import (
     BLUE_BRIGHT,
     GREEN,
@@ -374,6 +378,7 @@ def _parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     arguments = _parse_arguments()
+    set_windows_app_user_model_id(UPDATER_APP_USER_MODEL_ID)
     application = QApplication(sys.argv)
     application.setApplicationName("VNPAY RADAR Scanner Updater")
     configure_radar_theme(application)

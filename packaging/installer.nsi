@@ -13,10 +13,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.7.5"
+  !define APP_VERSION "0.7.6"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.7.5.0"
+  !define APP_FILE_VERSION "0.7.6.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -182,7 +182,7 @@ manager_file_ready:
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "Publisher" "${COMPANY_NAME}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayIcon" "$INSTDIR\radar-scanner-manager.exe,0"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayIcon" "$INSTDIR\radar-scanner.ico,0"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "NoModify" 1
@@ -190,8 +190,11 @@ manager_file_ready:
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   CreateDirectory "$SMPROGRAMS\VNPAY"
-  CreateShortcut "$SMPROGRAMS\VNPAY\RADAR Scanner Manager.lnk" "$INSTDIR\radar-scanner-manager.exe"
-  CreateShortcut "$DESKTOP\RADAR Scanner Manager.lnk" "$INSTDIR\radar-scanner-manager.exe"
+  Delete "$SMPROGRAMS\VNPAY\RADAR Scanner Manager.lnk"
+  Delete "$DESKTOP\RADAR Scanner Manager.lnk"
+  CreateShortcut "$SMPROGRAMS\VNPAY\RADAR Scanner Manager.lnk" "$INSTDIR\radar-scanner-manager.exe" "" "$INSTDIR\radar-scanner.ico" 0
+  CreateShortcut "$DESKTOP\RADAR Scanner Manager.lnk" "$INSTDIR\radar-scanner-manager.exe" "" "$INSTDIR\radar-scanner.ico" 0
+  System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
 
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "starting_service"
   ${If} $R9 == "1"

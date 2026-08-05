@@ -59,7 +59,7 @@ def test_update_lock_disables_navigation_and_shows_progress(tmp_path, monkeypatc
         assert window.sidebar.isEnabled() is False
         assert window.page_stack.isEnabled() is False
 
-        window._show_update_progress("Downloading Scanner Agent 0.7.5 · 94%", 94)
+        window._show_update_progress("Downloading Scanner Agent 0.7.6 · 94%", 94)
         assert window.update_progress_bar.maximum() == 100
         assert window.update_progress_bar.value() == 94
 
@@ -92,9 +92,9 @@ def test_update_handoff_keeps_inline_progress_visible(tmp_path, monkeypatch) -> 
 
     try:
         window._set_interaction_locked(True, "Preparing update")
-        window._launch_downloaded_update(installer, "0.7.5")
+        window._launch_downloaded_update(installer, "0.7.6")
 
-        assert launched == [(updater, installer, "0.7.5")]
+        assert launched == [(updater, installer, "0.7.6")]
         assert window.update_progress_bar.isHidden() is False
         assert window.update_progress_bar.maximum() == 0
         assert window.update_status_label.text().startswith("Updater started")
@@ -110,10 +110,10 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     application = _application()
     window = ManagerWindow(start_background_tasks=False)
 
-    current = UpdateInfo("0.7.5", "0.7.5", False, "", "", "", "")
+    current = UpdateInfo("0.7.6", "0.7.6", False, "", "", "", "")
     available = UpdateInfo(
-        "0.7.5",
         "0.7.6",
+        "0.7.7",
         True,
         "https://github.com/example/release",
         "setup.exe",
@@ -137,6 +137,7 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
 def test_official_brand_assets_render() -> None:
     _application()
 
+    assert branding_asset_path("icon.ico").is_file()
     assert branding_asset_path("icon.svg").is_file()
     assert branding_asset_path("logo.svg").is_file()
     assert not radar_icon(64).pixmap(64, 64).isNull()

@@ -35,6 +35,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.6` khai báo AppUserModelID ổn định, dùng ICO đa kích thước tại runtime và đặt
+  icon riêng cho shortcut/Apps & Features để tránh Windows Shell giữ icon cũ sau cập nhật.
 - Bản `0.7.5` chuyển trạng thái và progress bar tải bản cập nhật vào card **Software update**,
   loại bỏ banner trùng lặp phía trên nội dung nhưng vẫn khóa thao tác trong suốt quá trình.
 - Bản `0.7.4` thay toàn bộ icon vẽ tay bằng bộ nhận diện RADAR/VNPAY chính thức cho Manager,

@@ -6,6 +6,7 @@ project_root = Path(SPECPATH).parent
 version_file = os.environ.get("RADAR_MANAGER_VERSION_FILE")
 icon_file = project_root / "logo" / "icon.ico"
 brand_data = [
+    (str(project_root / "logo" / "icon.ico"), "logo"),
     (str(project_root / "logo" / "icon.svg"), "logo"),
     (str(project_root / "logo" / "logo.svg"), "logo"),
 ]

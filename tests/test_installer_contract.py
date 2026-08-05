@@ -130,4 +130,20 @@ def test_installer_uses_official_brand_icon() -> None:
     assert '!define MUI_ICON "${BRAND_ICON}"' in script
     assert 'Icon "${BRAND_ICON}"' in script
     assert 'UninstallIcon "${BRAND_ICON}"' in script
-    assert '"DisplayIcon" "$INSTDIR\\radar-scanner-manager.exe,0"' in script
+    assert '"DisplayIcon" "$INSTDIR\\radar-scanner.ico,0"' in script
+    assert '"$INSTDIR\\radar-scanner.ico" 0' in script
+    assert "SHChangeNotify" in script
+
+
+def test_release_bundle_contains_standalone_shell_icon() -> None:
+    build_script = (INSTALLER_SCRIPT.parent / "build.ps1").read_text(encoding="utf-8")
+    manager_spec = (INSTALLER_SCRIPT.parent / "radar-scanner-manager.spec").read_text(
+        encoding="utf-8"
+    )
+    updater_spec = (INSTALLER_SCRIPT.parent / "radar-scanner-updater.spec").read_text(
+        encoding="utf-8"
+    )
+
+    assert '"radar-scanner.ico"' in build_script
+    assert '"icon.ico"' in manager_spec
+    assert '"icon.ico"' in updater_spec
