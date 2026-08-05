@@ -1,6 +1,7 @@
 import socket
 import ssl
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -20,6 +21,10 @@ class DiagnosticResult:
     success: bool
     detail: str
     duration_ms: int
+
+
+DiagnosticStarted = Callable[[str, str], None]
+DiagnosticCompleted = Callable[[DiagnosticResult], None]
 
 
 def _tls_verifier(verify_tls: bool) -> ssl.SSLContext | bool:
@@ -46,8 +51,20 @@ async def run_diagnostics(
     settings: AgentSettings,
     *,
     transport: httpx.AsyncBaseTransport | None = None,
+    on_started: DiagnosticStarted | None = None,
+    on_result: DiagnosticCompleted | None = None,
 ) -> list[DiagnosticResult]:
     results: list[DiagnosticResult] = []
+
+    def notify_started(key: str, label: str) -> None:
+        if on_started:
+            on_started(key, label)
+
+    def completed(result: DiagnosticResult) -> None:
+        results.append(result)
+        if on_result:
+            on_result(result)
+
     timeout = httpx.Timeout(20.0, connect=8.0)
     async with httpx.AsyncClient(
         verify=_tls_verifier(settings.verify_tls),
@@ -56,11 +73,12 @@ async def run_diagnostics(
     ) as client:
         token_provider = TokenProvider(settings, client)
         token_ready = False
+        notify_started("sso", "VNPAY SSO")
         started = time.monotonic()
         try:
             await token_provider.get_token()
             token_ready = True
-            results.append(
+            completed(
                 DiagnosticResult(
                     "sso",
                     "VNPAY SSO",
@@ -70,7 +88,7 @@ async def run_diagnostics(
                 )
             )
         except Exception as exc:
-            results.append(
+            completed(
                 DiagnosticResult(
                     "sso",
                     "VNPAY SSO",
@@ -82,13 +100,14 @@ async def run_diagnostics(
 
         scanner = ScannerClient(settings, client)
         heartbeat_payload: dict[str, Any] | None = None
+        notify_started("scanner", "APK Scanner")
         started = time.monotonic()
         try:
             response = await client.get(f"{settings.scanner_url.rstrip('/')}/health", timeout=5)
             response.raise_for_status()
             payload = response.json()
             scanner_state = "busy" if payload.get("busy") else "ready"
-            results.append(
+            completed(
                 DiagnosticResult(
                     "scanner",
                     "APK Scanner",
@@ -98,7 +117,7 @@ async def run_diagnostics(
                 )
             )
         except Exception as exc:
-            results.append(
+            completed(
                 DiagnosticResult(
                     "scanner",
                     "APK Scanner",
@@ -108,6 +127,7 @@ async def run_diagnostics(
                 )
             )
 
+        notify_started("device", "Android device")
         started = time.monotonic()
         try:
             response = await client.get(f"{settings.scanner_url.rstrip('/')}/device", timeout=20)
@@ -119,7 +139,7 @@ async def run_diagnostics(
             if not selected.get("online"):
                 raise RuntimeError("No authorized Android device detected")
             serial = selected.get("serial") or "unknown serial"
-            results.append(
+            completed(
                 DiagnosticResult(
                     "device",
                     "Android device",
@@ -129,7 +149,7 @@ async def run_diagnostics(
                 )
             )
         except Exception as exc:
-            results.append(
+            completed(
                 DiagnosticResult(
                     "device",
                     "Android device",
@@ -139,6 +159,7 @@ async def run_diagnostics(
                 )
             )
 
+        notify_started("radar", "RADAR backend")
         if token_ready:
             started = time.monotonic()
             try:
@@ -148,7 +169,7 @@ async def run_diagnostics(
                 )
                 radar = RadarClient(settings, client, token_provider)
                 await radar.heartbeat(heartbeat_payload)
-                results.append(
+                completed(
                     DiagnosticResult(
                         "radar",
                         "RADAR backend",
@@ -158,7 +179,7 @@ async def run_diagnostics(
                     )
                 )
             except Exception as exc:
-                results.append(
+                completed(
                     DiagnosticResult(
                         "radar",
                         "RADAR backend",
@@ -168,7 +189,7 @@ async def run_diagnostics(
                     )
                 )
         else:
-            results.append(
+            completed(
                 DiagnosticResult(
                     "radar",
                     "RADAR backend",

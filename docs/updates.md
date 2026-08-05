@@ -35,6 +35,14 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.6.0` đồng bộ Scanner Manager/Updater với RADAR dark theme, chuyển truy vấn trạng thái
+  Windows Service khỏi UI thread và chỉ tải tab Logs khi người dùng mở. Diagnostics cập nhật từng
+  bước `WAITING/RUNNING/PASSED/FAILED` thay vì chờ toàn bộ luồng hoàn tất.
+- Manager `0.6.0` chỉ cho phép một instance trong mỗi phiên Windows và có system tray menu để mở
+  Manager, chạy Diagnostics, xem log, kiểm tra update và điều khiển service. Nút đóng cửa sổ thu
+  nhỏ Manager xuống tray; chọn **Exit** từ tray để thoát hoàn toàn.
+- Sau khi người dùng xác nhận **Update now**, Manager khóa navigation, cấu hình, service actions và
+  tray actions cho tới khi Updater được mở hoặc quá trình tải thất bại.
 - Bản `0.5.9` không gọi các endpoint đọc thiết bị/testcase của APK Scanner khi scanner đang bận.
   Trạng thái heartbeat dùng snapshot ổn định gần nhất, tránh làm đổi kênh ADB giữa lúc chạy
   `TC-MOBI-13`.

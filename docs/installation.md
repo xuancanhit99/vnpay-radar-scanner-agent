@@ -100,6 +100,9 @@ Không tắt máy hoặc kết thúc Updater ở giai đoạn này. Manager tự
 Setup hoàn tất. Riêng bản `0.5.0` cần mở lại Manager thủ công sau khi nâng cấp; hành vi tự mở lại
 áp dụng từ `0.5.1`.
 
+Từ bản `0.6.0`, Manager khóa các tab và thao tác còn lại ngay sau khi xác nhận cập nhật. Nút đóng
+cửa sổ cũng bị khóa cho tới khi Updater độc lập được mở hoặc việc tải bộ cài thất bại.
+
 Máy đang dùng phiên bản cũ hơn `0.4.0` cần cài Setup `0.4.0` thủ công một lần. Có thể tiếp tục
 nâng cấp thủ công bằng cách chạy file Setup phiên bản mới hơn với quyền Administrator.
 

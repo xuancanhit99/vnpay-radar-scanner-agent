@@ -1,12 +1,14 @@
 [project]
 name = "radar-scanner-agent"
-version = "0.5.9"
+version = "0.6.0"
 description = "Windows edge agent for VNPAY RADAR APK Scanner"
 requires-python = ">=3.12"
 dependencies = [
     "httpx==0.28.1",
+    "pillow==12.3.0",
     "pydantic==2.10.3",
     "pydantic-settings==2.6.1",
+    "pystray==0.19.5",
 ]
 
 [project.scripts]

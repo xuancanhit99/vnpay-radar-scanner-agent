@@ -101,5 +101,21 @@ def read_service_log(max_lines: int = 300) -> str:
     path = service_log_path()
     if not path.exists():
         return "Service log is not available yet."
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(lines[-max_lines:])
+    if max_lines <= 0:
+        return ""
+
+    chunks: list[bytes] = []
+    newline_count = 0
+    block_size = 16 * 1024
+    with path.open("rb") as log_file:
+        position = log_file.seek(0, os.SEEK_END)
+        while position > 0 and newline_count <= max_lines:
+            read_size = min(block_size, position)
+            position -= read_size
+            log_file.seek(position)
+            chunk = log_file.read(read_size)
+            chunks.append(chunk)
+            newline_count += chunk.count(b"\n")
+
+    content = b"".join(reversed(chunks)).decode("utf-8", errors="replace")
+    return "\n".join(content.splitlines()[-max_lines:])

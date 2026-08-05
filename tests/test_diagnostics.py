@@ -10,6 +10,7 @@ from radar_agent.settings import AgentSettings
 @pytest.mark.asyncio
 async def test_diagnostics_checks_sso_scanner_device_and_radar(tmp_path) -> None:
     requests: list[tuple[str, str]] = []
+    events: list[tuple[str, str]] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
         requests.append((request.method, str(request.url)))
@@ -57,11 +58,23 @@ async def test_diagnostics_checks_sso_scanner_device_and_radar(tmp_path) -> None
     results = await run_diagnostics(
         settings,
         transport=httpx.MockTransport(handler),
+        on_started=lambda key, _label: events.append(("started", key)),
+        on_result=lambda result: events.append(("completed", result.key)),
     )
 
     assert [result.key for result in results] == ["sso", "scanner", "device", "radar"]
     assert all(result.success for result in results)
     assert len(requests) == 7
+    assert events == [
+        ("started", "sso"),
+        ("completed", "sso"),
+        ("started", "scanner"),
+        ("completed", "scanner"),
+        ("started", "device"),
+        ("completed", "device"),
+        ("started", "radar"),
+        ("completed", "radar"),
+    ]
 
 
 @pytest.mark.asyncio

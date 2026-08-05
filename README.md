@@ -34,6 +34,8 @@ khởi tạo toàn bộ kết nối tới các dịch vụ từ xa.
 - **Scanner Agent**: worker chạy nền, gửi heartbeat độc lập, nhận job, gia hạn lease, chạy quét
   và gửi kết quả.
 - **Scanner Manager**: ứng dụng desktop Windows để cấu hình, quản lý service, chẩn đoán và xem log.
+- **System tray**: giữ Manager chạy nền, chỉ cho phép một cửa sổ và cung cấp thao tác nhanh với
+  Diagnostics, log, update và Windows Service.
 - **Scanner Updater**: tiến trình desktop độc lập hiển thị các mốc nâng cấp trong lúc Manager đóng
   và Setup thay thế file ứng dụng.
 - **SQLite outbox**: hàng đợi bền vững cục bộ dành cho kết quả chưa gửi được. PostgreSQL của RADAR

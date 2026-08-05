@@ -31,6 +31,16 @@ def test_query_service_reports_missing_service(monkeypatch) -> None:
     assert state.status == "not-installed"
 
 
+def test_read_service_log_returns_only_requested_tail(tmp_path, monkeypatch) -> None:
+    log_path = tmp_path / "agent.log"
+    log_path.write_text("\n".join(f"line-{index}" for index in range(1000)), encoding="utf-8")
+    monkeypatch.setattr(service_control, "service_log_path", lambda: log_path)
+
+    content = service_control.read_service_log(max_lines=3)
+
+    assert content == "line-997\nline-998\nline-999"
+
+
 def test_service_action_error_includes_agent_log_paths(monkeypatch) -> None:
     result = subprocess.CompletedProcess(
         args=[],

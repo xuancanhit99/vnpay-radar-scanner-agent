@@ -16,6 +16,18 @@ from radar_agent.config_store import (
     plaintext_bootstrap,
     save_settings,
 )
+from radar_agent.desktop_shell import SingleInstance, TrayController, focus_existing_manager
+from radar_agent.desktop_theme import (
+    BACKGROUND,
+    BLUE_BRIGHT,
+    GREEN,
+    INPUT,
+    MUTED,
+    RED,
+    TEXT,
+    apply_window_icon,
+    configure_radar_theme,
+)
 from radar_agent.diagnostics import DiagnosticResult, run_diagnostics
 from radar_agent.runtime_paths import (
     SERVICE_NAME,
@@ -26,6 +38,7 @@ from radar_agent.runtime_paths import (
     worker_executable,
 )
 from radar_agent.service_control import (
+    ServiceState,
     install_service,
     query_service,
     read_service_log,
@@ -43,14 +56,20 @@ from radar_agent.update_service import (
 )
 
 _CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+_DIAGNOSTIC_STEPS = (
+    ("sso", "VNPAY SSO"),
+    ("scanner", "APK Scanner"),
+    ("device", "Android device"),
+    ("radar", "RADAR backend"),
+)
 
 
 class ManagerWindow(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title(f"VNPAY RADAR Scanner Manager {__version__}")
-        self.geometry("1040x720")
-        self.minsize(900, 620)
+        self.geometry("1080x760")
+        self.minsize(920, 640)
 
         self._package_root = package_root()
         self._config_path = default_config_path(self._package_root)
@@ -62,12 +81,21 @@ class ManagerWindow(tk.Tk):
         self._update_check_running = False
         self._update_install_running = False
         self._available_update: UpdateInfo | None = None
+        self._status_refresh_running = False
+        self._diagnostics_running = False
+        self._diagnostic_results: dict[str, DiagnosticResult] = {}
+        self._diagnostic_items: dict[str, str] = {}
+        self._interaction_locked = False
+        self._locked_widget_states: dict[ttk.Widget, bool] = {}
+        self._logs_built = False
+        self._tray: TrayController | None = None
+        self._tray_notice_shown = False
 
         self._configure_style()
+        apply_window_icon(self)
         self._build_ui()
         self._load_form()
         self.refresh_status()
-        self.refresh_logs()
         installer_status = read_installer_status()
         self._show_installer_status(installer_status)
         self.protocol("WM_DELETE_WINDOW", self._close_window)
@@ -75,59 +103,52 @@ class ManagerWindow(tk.Tk):
         if installer_status is None or installer_status.state == "success":
             delay = 5000 if installer_status else 1200
             self.after(delay, lambda: self.check_for_updates(silent=True))
+        self.after(200, self._start_tray)
         self.after(4000, self._status_tick)
 
     def _configure_style(self) -> None:
-        style = ttk.Style(self)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
-        style.configure("Root.TFrame", background="#f3f6f8")
+        style = configure_radar_theme(self)
         style.configure(
-            "Title.TLabel",
-            background="#f3f6f8",
-            foreground="#17324d",
-            font=("Segoe UI", 20, "bold"),
+            "Version.TLabel",
+            background=INPUT,
+            foreground=BLUE_BRIGHT,
+            padding=(10, 5),
+            font=("Segoe UI Semibold", 9),
         )
-        style.configure(
-            "Subtitle.TLabel",
-            background="#f3f6f8",
-            foreground="#607487",
-            font=("Segoe UI", 10),
-        )
-        style.configure("Section.TLabelframe", padding=14)
-        style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
-        style.configure("Field.TLabel", foreground="#526577", font=("Segoe UI", 9, "bold"))
-        style.configure("Status.TLabel", foreground="#1f3448")
-        style.configure("Success.TLabel", foreground="#177245", font=("Segoe UI", 9, "bold"))
-        style.configure("Error.TLabel", foreground="#b42318", font=("Segoe UI", 9, "bold"))
-        style.configure(
-            "Update.TLabel",
-            foreground="#9a4d00",
-            font=("Segoe UI", 9, "bold"),
-        )
-        style.configure("TNotebook.Tab", padding=(18, 9))
-        style.configure("Treeview", rowheight=29, font=("Segoe UI", 9))
-        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        style.configure("Page.TFrame", background=BACKGROUND)
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, style="Root.TFrame", padding=(20, 16, 20, 20))
         root.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(root, text="VNPAY RADAR Scanner Manager", style="Title.TLabel").pack(
+        header = ttk.Frame(root, style="Root.TFrame")
+        header.pack(fill=tk.X)
+        heading = ttk.Frame(header, style="Root.TFrame")
+        heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Label(heading, text="VNPAY RADAR Scanner Manager", style="Title.TLabel").pack(
             anchor=tk.W
         )
         ttk.Label(
-            root,
-            text="Windows edge scanner control",
+            heading,
+            text="WINDOWS EDGE SCANNER CONTROL",
             style="Subtitle.TLabel",
-        ).pack(anchor=tk.W, pady=(0, 14))
+        ).pack(anchor=tk.W)
+        ttk.Label(header, text=f"VERSION {__version__}", style="Version.TLabel").pack(
+            side=tk.RIGHT, anchor=tk.N, pady=(3, 0)
+        )
+        self.busy_status = tk.StringVar()
+        ttk.Label(
+            root,
+            textvariable=self.busy_status,
+            style="Busy.TLabel",
+        ).pack(anchor=tk.W, pady=(5, 8))
 
         self.tabs = ttk.Notebook(root)
         self.tabs.pack(fill=tk.BOTH, expand=True)
-        self.overview_tab = ttk.Frame(self.tabs, padding=18)
-        self.configuration_tab = ttk.Frame(self.tabs, padding=18)
-        self.diagnostics_tab = ttk.Frame(self.tabs, padding=18)
-        self.logs_tab = ttk.Frame(self.tabs, padding=18)
+        self.overview_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
+        self.configuration_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
+        self.diagnostics_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
+        self.logs_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
         self.tabs.add(self.overview_tab, text="Overview")
         self.tabs.add(self.configuration_tab, text="Configuration")
         self.tabs.add(self.diagnostics_tab, text="Diagnostics")
@@ -136,7 +157,7 @@ class ManagerWindow(tk.Tk):
         self._build_overview_tab()
         self._build_configuration_tab()
         self._build_diagnostics_tab()
-        self._build_logs_tab()
+        self.tabs.bind("<<NotebookTabChanged>>", self._tab_changed)
 
     def _build_overview_tab(self) -> None:
         page = self.overview_tab
@@ -145,8 +166,8 @@ class ManagerWindow(tk.Tk):
         status.grid(row=0, column=0, sticky="nsew")
         status.columnconfigure(1, weight=1)
 
-        self.service_status = tk.StringVar()
-        self.direct_status = tk.StringVar()
+        self.service_status = tk.StringVar(value="Checking...")
+        self.direct_status = tk.StringVar(value="Checking...")
         self.agent_status = tk.StringVar()
         self.version_status = tk.StringVar(value=__version__)
         self.config_status = tk.StringVar()
@@ -190,19 +211,26 @@ class ManagerWindow(tk.Tk):
             text="Update now",
             command=self.install_available_update,
             state=tk.DISABLED,
+            style="Primary.TButton",
         )
         self.install_update_button.grid(row=0, column=2)
 
         service = ttk.LabelFrame(page, text="Windows Service", style="Section.TLabelframe")
         service.grid(row=2, column=0, sticky="ew", pady=(16, 0))
         self.install_button = ttk.Button(
-            service, text="Install / Reinstall", command=self.install_or_upgrade_service
+            service,
+            text="Install / Reinstall",
+            command=self.install_or_upgrade_service,
+            style="Primary.TButton",
         )
         self.start_button = ttk.Button(
             service, text="Start", command=lambda: self.run_service_action("start")
         )
         self.stop_button = ttk.Button(
-            service, text="Stop", command=lambda: self.run_service_action("stop")
+            service,
+            text="Stop",
+            command=lambda: self.run_service_action("stop"),
+            style="Danger.TButton",
         )
         self.restart_button = ttk.Button(
             service, text="Restart", command=lambda: self.run_service_action("restart")
@@ -229,13 +257,16 @@ class ManagerWindow(tk.Tk):
             "Use the Windows Service for normal operation. Direct run is intended for "
             "setup and diagnostics and is disabled while the service is running."
         )
-        ttk.Label(page, text=note, foreground="#607487", wraplength=820).grid(
+        ttk.Label(page, text=note, style="Subtitle.TLabel", wraplength=820).grid(
             row=4, column=0, sticky=tk.W, pady=(16, 0)
         )
 
     def _build_configuration_tab(self) -> None:
         page = self.configuration_tab
-        page.columnconfigure(1, weight=1)
+        page.columnconfigure(0, weight=1)
+        form = ttk.LabelFrame(page, text="Agent configuration", style="Section.TLabelframe")
+        form.grid(row=0, column=0, sticky="nsew")
+        form.columnconfigure(1, weight=1)
         self.base_url = tk.StringVar()
         self.agent_id = tk.StringVar()
         self.display_name = tk.StringVar()
@@ -267,13 +298,13 @@ class ManagerWindow(tk.Tk):
             ("Retry delay (seconds)", self.retry_delay, "spin:1:60"),
         )
         for row, (label, variable, kind) in enumerate(fields):
-            ttk.Label(page, text=label, style="Field.TLabel").grid(
+            ttk.Label(form, text=label, style="Field.TLabel").grid(
                 row=row, column=0, sticky=tk.W, padx=(0, 22), pady=6
             )
             if kind.startswith("spin:"):
                 _, minimum, maximum = kind.split(":")
                 widget = ttk.Spinbox(
-                    page,
+                    form,
                     textvariable=variable,
                     from_=int(minimum),
                     to=int(maximum),
@@ -282,41 +313,50 @@ class ManagerWindow(tk.Tk):
                 widget.grid(row=row, column=1, sticky=tk.W, pady=6)
             else:
                 widget = ttk.Entry(
-                    page,
+                    form,
                     textvariable=variable,
                     show="*" if kind == "secret" else "",
                 )
                 widget.grid(row=row, column=1, sticky="ew", pady=6)
 
         tls_row = len(fields)
-        ttk.Label(page, text="TLS", style="Field.TLabel").grid(
+        ttk.Label(form, text="TLS", style="Field.TLabel").grid(
             row=tls_row, column=0, sticky=tk.W, padx=(0, 22), pady=6
         )
         ttk.Checkbutton(
-            page,
+            form,
             text="Verify TLS certificates",
             variable=self.verify_tls,
+            style="Card.TCheckbutton",
         ).grid(row=tls_row, column=1, sticky=tk.W, pady=6)
 
-        buttons = ttk.Frame(page)
+        buttons = ttk.Frame(form, style="Card.TFrame")
         buttons.grid(row=tls_row + 1, column=1, sticky=tk.W, pady=(16, 0))
-        ttk.Button(buttons, text="Save configuration", command=self.save_configuration).pack(
-            side=tk.LEFT, padx=(0, 9)
-        )
+        ttk.Button(
+            buttons,
+            text="Save configuration",
+            command=self.save_configuration,
+            style="Primary.TButton",
+        ).pack(side=tk.LEFT, padx=(0, 9))
         ttk.Button(buttons, text="Reload", command=self.reload_configuration).pack(side=tk.LEFT)
         ttk.Label(
-            page,
+            form,
             text="Leave Client secret blank to keep the existing DPAPI-protected value.",
-            foreground="#607487",
+            style="CardSubtitle.TLabel",
         ).grid(row=tls_row + 2, column=1, sticky=tk.W, pady=(10, 0))
 
     def _build_diagnostics_tab(self) -> None:
         page = self.diagnostics_tab
         page.columnconfigure(0, weight=1)
         page.rowconfigure(1, weight=1)
-        toolbar = ttk.Frame(page)
+        toolbar = ttk.Frame(page, style="Card.TFrame", padding=(12, 8))
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        self.diagnostic_button = ttk.Button(toolbar, text="Run checks", command=self.run_checks)
+        self.diagnostic_button = ttk.Button(
+            toolbar,
+            text="Run checks",
+            command=self.run_checks,
+            style="Primary.TButton",
+        )
         self.diagnostic_button.pack(side=tk.LEFT)
         self.diagnostic_summary = tk.StringVar(value="Not run")
         self.diagnostic_summary_label = ttk.Label(
@@ -338,18 +378,23 @@ class ManagerWindow(tk.Tk):
         self.diagnostic_table.column("result", width=90, stretch=False)
         self.diagnostic_table.column("detail", width=520, stretch=True)
         self.diagnostic_table.column("latency", width=90, stretch=False, anchor=tk.E)
-        self.diagnostic_table.tag_configure("passed", foreground="#177245")
-        self.diagnostic_table.tag_configure("failed", foreground="#b42318")
+        self.diagnostic_table.tag_configure("waiting", foreground=MUTED)
+        self.diagnostic_table.tag_configure("running", foreground=BLUE_BRIGHT)
+        self.diagnostic_table.tag_configure("passed", foreground=GREEN)
+        self.diagnostic_table.tag_configure("failed", foreground=RED)
         scrollbar = ttk.Scrollbar(page, orient=tk.VERTICAL, command=self.diagnostic_table.yview)
         self.diagnostic_table.configure(yscrollcommand=scrollbar.set)
         self.diagnostic_table.grid(row=1, column=0, sticky="nsew")
         scrollbar.grid(row=1, column=1, sticky="ns")
 
     def _build_logs_tab(self) -> None:
+        if self._logs_built:
+            return
+        self._logs_built = True
         page = self.logs_tab
         page.columnconfigure(0, weight=1)
         page.rowconfigure(1, weight=1)
-        toolbar = ttk.Frame(page)
+        toolbar = ttk.Frame(page, style="Card.TFrame", padding=(12, 8))
         toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
         ttk.Button(toolbar, text="Refresh", command=self.refresh_logs).pack(
             side=tk.LEFT, padx=(0, 9)
@@ -366,9 +411,9 @@ class ManagerWindow(tk.Tk):
             wrap=tk.NONE,
             state=tk.DISABLED,
             font=("Consolas", 9),
-            background="#101820",
-            foreground="#d8e2ea",
-            insertbackground="#d8e2ea",
+            background=BACKGROUND,
+            foreground=TEXT,
+            insertbackground=TEXT,
             borderwidth=0,
             padx=10,
             pady=10,
@@ -379,6 +424,12 @@ class ManagerWindow(tk.Tk):
         self.log_output.grid(row=0, column=0, sticky="nsew")
         vertical.grid(row=0, column=1, sticky="ns")
         horizontal.grid(row=1, column=0, sticky="ew")
+
+    def _tab_changed(self, _event: tk.Event | None = None) -> None:
+        if self.tabs.select() != str(self.logs_tab):
+            return
+        self._build_logs_tab()
+        self.refresh_logs()
 
     def _load_settings_safely(self) -> AgentSettings:
         try:
@@ -458,7 +509,21 @@ class ManagerWindow(tk.Tk):
             return False
 
     def refresh_status(self) -> None:
-        state = query_service()
+        if self._status_refresh_running:
+            return
+        self._status_refresh_running = True
+
+        def worker() -> None:
+            try:
+                state = query_service()
+            except Exception:
+                state = ServiceState(False, "unknown")
+            self.after(0, lambda: self._apply_status(state))
+
+        threading.Thread(target=worker, name="manager-status-refresh", daemon=True).start()
+
+    def _apply_status(self, state: ServiceState) -> None:
+        self._status_refresh_running = False
         direct_running = self._direct_process is not None and self._direct_process.poll() is None
         self.service_status.set(
             f"{state.status} ({state.start_mode})" if state.installed else "Not installed"
@@ -470,24 +535,61 @@ class ManagerWindow(tk.Tk):
             config_text = f"{config_text} ({self._configuration_error})"
         self.config_status.set(config_text)
         self.package_status.set(str(self._package_root))
-        self.start_button.configure(
-            state=tk.NORMAL if state.installed and state.status != "running" else tk.DISABLED
-        )
-        self.stop_button.configure(
-            state=tk.NORMAL if state.installed and state.status == "running" else tk.DISABLED
-        )
-        self.restart_button.configure(
-            state=tk.NORMAL if state.installed and state.status == "running" else tk.DISABLED
-        )
-        self.direct_start_button.configure(
-            state=tk.NORMAL if not direct_running and state.status != "running" else tk.DISABLED
-        )
-        self.direct_stop_button.configure(state=tk.NORMAL if direct_running else tk.DISABLED)
+        if not self._interaction_locked:
+            self.start_button.configure(
+                state=tk.NORMAL if state.installed and state.status != "running" else tk.DISABLED
+            )
+            self.stop_button.configure(
+                state=tk.NORMAL if state.installed and state.status == "running" else tk.DISABLED
+            )
+            self.restart_button.configure(
+                state=tk.NORMAL if state.installed and state.status == "running" else tk.DISABLED
+            )
+            self.direct_start_button.configure(
+                state=tk.NORMAL if not direct_running and state.status != "running" else tk.DISABLED
+            )
+            self.direct_stop_button.configure(state=tk.NORMAL if direct_running else tk.DISABLED)
 
     def _status_tick(self) -> None:
         if self.winfo_exists():
             self.refresh_status()
             self.after(4000, self._status_tick)
+
+    def _set_interaction_locked(self, locked: bool, message: str = "") -> None:
+        interactive_types = (
+            ttk.Button,
+            ttk.Checkbutton,
+            ttk.Entry,
+            ttk.Notebook,
+            ttk.Scrollbar,
+            ttk.Spinbox,
+            ttk.Treeview,
+        )
+        if locked:
+            if self._interaction_locked:
+                self.busy_status.set(message)
+                return
+            self._interaction_locked = True
+            self._locked_widget_states.clear()
+            pending = list(self.winfo_children())
+            while pending:
+                widget = pending.pop()
+                pending.extend(widget.winfo_children())
+                if isinstance(widget, interactive_types):
+                    self._locked_widget_states[widget] = "disabled" in widget.state()
+                    widget.state(["disabled"])
+            self.configure(cursor="wait")
+            self.busy_status.set(message)
+            return
+
+        for widget, was_disabled in self._locked_widget_states.items():
+            if widget.winfo_exists():
+                widget.state(["disabled"] if was_disabled else ["!disabled"])
+        self._locked_widget_states.clear()
+        self._interaction_locked = False
+        self.configure(cursor="")
+        self.busy_status.set("")
+        self.refresh_status()
 
     def check_for_updates(self, *, silent: bool = False) -> None:
         if self._update_check_running or self._update_install_running:
@@ -559,6 +661,13 @@ class ManagerWindow(tk.Tk):
         update = self._available_update
         if update is None or self._update_install_running:
             return
+        if self._diagnostics_running or self._operation_running:
+            messagebox.showwarning(
+                "Software update",
+                "Wait for the current operation to finish before updating.",
+                parent=self,
+            )
+            return
         confirmed = messagebox.askyesno(
             "Software update",
             f"Install version {update.latest_version} now?\n\n"
@@ -569,8 +678,10 @@ class ManagerWindow(tk.Tk):
             return
 
         self._update_install_running = True
-        self.check_update_button.configure(state=tk.DISABLED)
-        self.install_update_button.configure(state=tk.DISABLED)
+        self._set_interaction_locked(
+            True,
+            f"UPDATE IN PROGRESS · Downloading version {update.latest_version}",
+        )
         self.update_status.set(f"Downloading version {update.latest_version}...")
         self.update_status_label.configure(style="Status.TLabel")
 
@@ -580,7 +691,7 @@ class ManagerWindow(tk.Tk):
                 message = f"Downloading version {update.latest_version}... {percent}%"
             else:
                 message = f"Downloading version {update.latest_version}... {received // 1024} KB"
-            self.after(0, lambda text=message: self.update_status.set(text))
+            self.after(0, lambda text=message: self._show_update_progress(text))
 
         def worker() -> None:
             try:
@@ -600,8 +711,13 @@ class ManagerWindow(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _show_update_progress(self, message: str) -> None:
+        self.update_status.set(message)
+        self.busy_status.set(f"UPDATE IN PROGRESS · {message}")
+
     def _update_download_failed(self, error: str) -> None:
         self._update_install_running = False
+        self._set_interaction_locked(False)
         self.check_update_button.configure(state=tk.NORMAL)
         self.install_update_button.configure(state=tk.NORMAL)
         self.update_status.set("Update download failed")
@@ -613,6 +729,7 @@ class ManagerWindow(tk.Tk):
             if self._direct_process is not None and self._direct_process.poll() is None:
                 self.stop_direct()
             self.update_status.set("Starting update progress window...")
+            self.busy_status.set("UPDATE IN PROGRESS · Starting installer")
             self.update_idletasks()
             updater = self._package_root / "radar-scanner-updater.exe"
             if updater.is_file():
@@ -623,6 +740,7 @@ class ManagerWindow(tk.Tk):
             self._update_download_failed(str(exc))
             return
         self.update_status.set("Updater started. Manager will close during installation...")
+        self.busy_status.set("UPDATE IN PROGRESS · Waiting for installer")
 
     def _run_operation(self, operation, *, title: str, success_message: str) -> None:
         if self._operation_running:
@@ -726,6 +844,7 @@ class ManagerWindow(tk.Tk):
             messagebox.showerror("Direct run error", str(exc), parent=self)
             return
         threading.Thread(target=self._read_process_output, daemon=True).start()
+        self._build_logs_tab()
         self.tabs.select(self.logs_tab)
         self._set_log_text("")
         self.refresh_status()
@@ -762,55 +881,107 @@ class ManagerWindow(tk.Tk):
         self.refresh_status()
 
     def run_checks(self) -> None:
+        if self._diagnostics_running or self._interaction_locked:
+            return
         try:
             settings = self._collect_settings()
             settings.validate_runtime()
         except (ValidationError, ValueError, OSError) as exc:
             messagebox.showerror("Diagnostics", str(exc), parent=self)
             return
+        self._diagnostics_running = True
+        self._diagnostic_results.clear()
+        self._diagnostic_items.clear()
         self.diagnostic_button.configure(state=tk.DISABLED)
-        self.diagnostic_summary.set("Running...")
-        self.diagnostic_summary_label.configure(style="Status.TLabel")
+        self.install_update_button.configure(state=tk.DISABLED)
+        self.diagnostic_summary.set(f"Running 0/{len(_DIAGNOSTIC_STEPS)} checks")
+        self.diagnostic_summary_label.configure(style="Busy.TLabel")
         for item in self.diagnostic_table.get_children():
             self.diagnostic_table.delete(item)
+        for key, label in _DIAGNOSTIC_STEPS:
+            self._diagnostic_items[key] = self.diagnostic_table.insert(
+                "",
+                tk.END,
+                values=(label, "WAITING", "Waiting to run", "—"),
+                tags=("waiting",),
+            )
 
         def worker() -> None:
             try:
-                results = asyncio.run(run_diagnostics(settings))
+                results = asyncio.run(
+                    run_diagnostics(
+                        settings,
+                        on_started=lambda key, label: self.after(
+                            0,
+                            lambda: self._diagnostic_started(key, label),
+                        ),
+                        on_result=lambda result: self.after(
+                            0,
+                            lambda: self._diagnostic_completed(result),
+                        ),
+                    )
+                )
             except Exception as exc:
                 error = str(exc)
                 self.after(0, lambda message=error: self._diagnostics_failed(message))
             else:
-                self.after(0, lambda: self._show_diagnostics(results))
+                self.after(0, lambda: self._diagnostics_finished(results))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _show_diagnostics(self, results: list[DiagnosticResult]) -> None:
-        passed = 0
-        for result in results:
-            if result.success:
-                passed += 1
-            self.diagnostic_table.insert(
-                "",
-                tk.END,
+    def _diagnostic_started(self, key: str, label: str) -> None:
+        item = self._diagnostic_items.get(key)
+        if item:
+            self.diagnostic_table.item(
+                item,
+                values=(label, "RUNNING", "Checking connection...", "—"),
+                tags=("running",),
+            )
+            self.diagnostic_table.see(item)
+
+    def _diagnostic_completed(self, result: DiagnosticResult) -> None:
+        self._diagnostic_results[result.key] = result
+        item = self._diagnostic_items.get(result.key)
+        if item:
+            self.diagnostic_table.item(
+                item,
                 values=(
                     result.label,
-                    "Passed" if result.success else "Failed",
+                    "PASSED" if result.success else "FAILED",
                     result.detail,
                     f"{result.duration_ms} ms",
                 ),
                 tags=("passed" if result.success else "failed",),
             )
+            self.diagnostic_table.see(item)
+        passed = sum(result.success for result in self._diagnostic_results.values())
+        completed = len(self._diagnostic_results)
+        self.diagnostic_summary.set(
+            f"Running {completed}/{len(_DIAGNOSTIC_STEPS)} · {passed} passed"
+        )
+
+    def _diagnostics_finished(self, results: list[DiagnosticResult]) -> None:
+        self._diagnostics_running = False
+        passed = sum(result.success for result in results)
         self.diagnostic_summary.set(f"{passed}/{len(results)} checks passed")
         self.diagnostic_summary_label.configure(
             style="Success.TLabel" if passed == len(results) else "Error.TLabel"
         )
-        self.diagnostic_button.configure(state=tk.NORMAL)
+        if not self._interaction_locked:
+            self.diagnostic_button.configure(state=tk.NORMAL)
+            self.install_update_button.configure(
+                state=tk.NORMAL if self._available_update else tk.DISABLED
+            )
 
     def _diagnostics_failed(self, error: str) -> None:
+        self._diagnostics_running = False
         self.diagnostic_summary.set("Diagnostics failed")
         self.diagnostic_summary_label.configure(style="Error.TLabel")
-        self.diagnostic_button.configure(state=tk.NORMAL)
+        if not self._interaction_locked:
+            self.diagnostic_button.configure(state=tk.NORMAL)
+            self.install_update_button.configure(
+                state=tk.NORMAL if self._available_update else tk.DISABLED
+            )
         messagebox.showerror("Diagnostics", error, parent=self)
 
     def _set_log_text(self, content: str) -> None:
@@ -829,6 +1000,8 @@ class ManagerWindow(tk.Tk):
         self.log_output.configure(state=tk.DISABLED)
 
     def refresh_logs(self) -> None:
+        if not self._logs_built:
+            return
         if self._direct_process is not None and self._direct_process.poll() is None:
             return
         try:
@@ -841,23 +1014,94 @@ class ManagerWindow(tk.Tk):
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(folder)
 
-    def _close_window(self) -> None:
+    def _start_tray(self) -> None:
+        try:
+            self._tray = TrayController(
+                dispatch=lambda callback: self.after(0, callback),
+                open_manager=self._show_manager,
+                run_diagnostics=self._run_diagnostics_from_tray,
+                open_logs=self._open_logs_from_tray,
+                check_updates=self.check_for_updates,
+                start_service=lambda: self.run_service_action("start"),
+                stop_service=lambda: self.run_service_action("stop"),
+                restart_service=lambda: self.run_service_action("restart"),
+                exit_application=self._exit_application,
+                actions_enabled=lambda: not self._interaction_locked,
+            )
+            self._tray.start()
+        except Exception:
+            self._tray = None
+
+    def _show_manager(self) -> None:
+        self.deiconify()
+        self.state("normal")
+        self.lift()
+        self.focus_force()
+
+    def _run_diagnostics_from_tray(self) -> None:
+        if self._interaction_locked:
+            return
+        self._show_manager()
+        self.tabs.select(self.diagnostics_tab)
+        self.run_checks()
+
+    def _open_logs_from_tray(self) -> None:
+        if self._interaction_locked:
+            return
+        self._show_manager()
+        self._build_logs_tab()
+        self.tabs.select(self.logs_tab)
+        self.refresh_logs()
+
+    def _exit_application(self) -> None:
+        if self._interaction_locked:
+            messagebox.showinfo(
+                "Update in progress",
+                "Scanner Manager cannot exit while an update is in progress.",
+                parent=self,
+            )
+            return
         direct_running = self._direct_process is not None and self._direct_process.poll() is None
         if direct_running:
             should_close = messagebox.askyesno(
                 "Stop direct process?",
-                "Closing the Manager will stop the direct Agent process. Continue?",
+                "Exiting the Manager will stop the direct Agent process. Continue?",
                 parent=self,
             )
             if not should_close:
                 return
             self.stop_direct()
+        if self._tray is not None:
+            self._tray.stop()
         self.destroy()
+
+    def _close_window(self) -> None:
+        if self._interaction_locked:
+            messagebox.showinfo(
+                "Update in progress",
+                "Wait for the update process to open before closing Scanner Manager.",
+                parent=self,
+            )
+            return
+        if self._tray is None:
+            self._exit_application()
+            return
+        self.withdraw()
+        if not self._tray_notice_shown:
+            self._tray_notice_shown = True
+            self._tray.notify_minimized()
 
 
 def main() -> None:
-    application = ManagerWindow()
-    application.mainloop()
+    instance = SingleInstance()
+    if not instance.acquire():
+        focus_existing_manager()
+        return
+    try:
+        application = ManagerWindow()
+        application.mainloop()
+    finally:
+        instance.close()
 
 
 if __name__ == "__main__":

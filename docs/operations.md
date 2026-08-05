@@ -19,7 +19,13 @@ Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics ki�
 3. APK Scanner `/device` và quyền của thiết bị Android.
 4. Heartbeat có xác thực tới RADAR.
 
-Chạy Diagnostics sẽ gửi một heartbeat thật nhưng không nhận hoặc thực thi scan job.
+Chạy Diagnostics sẽ gửi một heartbeat thật nhưng không nhận hoặc thực thi scan job. Từ phiên bản
+`0.6.0`, bảng kết quả hiển thị trạng thái của từng bước ngay khi chạy xong; không cần chờ cả bốn
+phép kiểm tra hoàn tất mới thấy kết quả.
+
+Scanner Manager chạy một instance trong mỗi phiên đăng nhập Windows. Nút đóng cửa sổ thu nhỏ ứng
+dụng xuống system tray. Menu tray cung cấp các thao tác nhanh: mở Manager, chạy Diagnostics, mở log,
+kiểm tra update, Start/Stop/Restart service và Exit.
 
 ## Kiểm tra bằng dòng lệnh
 

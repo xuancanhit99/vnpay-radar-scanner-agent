@@ -10,6 +10,16 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from radar_agent.desktop_theme import (
+    BACKGROUND,
+    BLUE_BRIGHT,
+    GREEN,
+    MUTED,
+    RED,
+    TEXT,
+    apply_window_icon,
+    configure_radar_theme,
+)
 from radar_agent.runtime_paths import program_data_directory
 from radar_agent.update_service import InstallerStatus, read_installer_status
 
@@ -102,9 +112,9 @@ class UpdaterWindow(tk.Tk):
         self.title(f"VNPAY RADAR Scanner Update {target_version}")
         self.geometry("650x470")
         self.resizable(False, False)
-        self.configure(background="#f3f6f8")
         self.protocol("WM_DELETE_WINDOW", self._close_window)
         self._configure_style()
+        apply_window_icon(self)
         self._build_ui()
         self._center_window()
         self.attributes("-topmost", True)
@@ -112,31 +122,57 @@ class UpdaterWindow(tk.Tk):
         self.after(250, self._start_installation)
 
     def _configure_style(self) -> None:
-        style = ttk.Style(self)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
-        style.configure("UpdaterRoot.TFrame", background="#f3f6f8")
+        style = configure_radar_theme(self)
+        style.configure("UpdaterRoot.TFrame", background=BACKGROUND)
         style.configure(
             "UpdaterTitle.TLabel",
-            background="#f3f6f8",
-            foreground="#17324d",
-            font=("Segoe UI", 18, "bold"),
+            background=BACKGROUND,
+            foreground=TEXT,
+            font=("Segoe UI Semibold", 18),
         )
         style.configure(
             "UpdaterSubtitle.TLabel",
-            background="#f3f6f8",
-            foreground="#607487",
+            background=BACKGROUND,
+            foreground=MUTED,
             font=("Segoe UI", 10),
         )
-        style.configure("Step.TLabel", font=("Segoe UI", 10), foreground="#243b53")
-        style.configure("StepState.TLabel", font=("Segoe UI", 9, "bold"), anchor=tk.E)
-        style.configure("UpdaterDetail.TLabel", foreground="#526577", font=("Segoe UI", 9))
+        style.configure(
+            "Step.TLabel",
+            background=BACKGROUND,
+            foreground=TEXT,
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "StepState.TLabel",
+            background=BACKGROUND,
+            foreground=MUTED,
+            font=("Segoe UI Semibold", 9),
+            anchor=tk.E,
+        )
+        style.configure(
+            "UpdaterDetail.TLabel",
+            background=BACKGROUND,
+            foreground=MUTED,
+            font=("Segoe UI", 9),
+        )
         style.configure(
             "UpdaterSuccess.TLabel",
-            foreground="#177245",
-            font=("Segoe UI", 10, "bold"),
+            background=BACKGROUND,
+            foreground=GREEN,
+            font=("Segoe UI Semibold", 10),
         )
-        style.configure("UpdaterError.TLabel", foreground="#b42318", font=("Segoe UI", 10, "bold"))
+        style.configure(
+            "UpdaterError.TLabel",
+            background=BACKGROUND,
+            foreground=RED,
+            font=("Segoe UI Semibold", 10),
+        )
+        style.configure(
+            "Horizontal.TProgressbar",
+            background=BLUE_BRIGHT,
+            troughcolor="#0E1828",
+            bordercolor="#0E1828",
+        )
 
     def _build_ui(self) -> None:
         root = ttk.Frame(self, style="UpdaterRoot.TFrame", padding=(28, 24, 28, 22))
@@ -162,12 +198,12 @@ class UpdaterWindow(tk.Tk):
                 steps,
                 width=18,
                 height=18,
-                background="#f3f6f8",
+                background=BACKGROUND,
                 borderwidth=0,
                 highlightthickness=0,
             )
             marker.grid(row=index, column=0, padx=(0, 10), pady=5)
-            marker.create_oval(3, 3, 15, 15, fill="#c5ced7", outline="")
+            marker.create_oval(3, 3, 15, 15, fill="#334155", outline="")
             self.step_markers.append(marker)
             ttk.Label(steps, text=title, style="Step.TLabel").grid(
                 row=index,
@@ -215,10 +251,10 @@ class UpdaterWindow(tk.Tk):
 
     def _render_progress(self, state: ProgressState) -> None:
         colors = {
-            "done": "#177245",
-            "active": "#1473e6",
-            "failed": "#b42318",
-            "waiting": "#c5ced7",
+            "done": GREEN,
+            "active": BLUE_BRIGHT,
+            "failed": RED,
+            "waiting": "#334155",
         }
         for index, (marker, label) in enumerate(
             zip(self.step_markers, self.step_states, strict=True)
