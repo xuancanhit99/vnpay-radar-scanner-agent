@@ -411,7 +411,7 @@ class ManagerWindow(tk.Tk):
             wrap=tk.NONE,
             state=tk.DISABLED,
             font=("Consolas", 9),
-            background=BACKGROUND,
+            background=INPUT,
             foreground=TEXT,
             insertbackground=TEXT,
             borderwidth=0,

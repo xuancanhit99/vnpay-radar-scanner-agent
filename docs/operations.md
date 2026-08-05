@@ -12,7 +12,7 @@ Trạng thái ổn định được kỳ vọng:
 - Heartbeat tiếp tục được gửi trong khi scan đang chạy.
 - Số dòng pending trong `agent.db` không tăng liên tục.
 
-Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics kiểm tra theo thứ tự:
+Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics kiểm tra các thành phần:
 
 1. Client Credentials của VNPAY SSO.
 2. APK Scanner `/health`.
@@ -21,7 +21,9 @@ Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics ki�
 
 Chạy Diagnostics sẽ gửi một heartbeat thật nhưng không nhận hoặc thực thi scan job. Từ phiên bản
 `0.6.0`, bảng kết quả hiển thị trạng thái của từng bước ngay khi chạy xong; không cần chờ cả bốn
-phép kiểm tra hoàn tất mới thấy kết quả.
+phép kiểm tra hoàn tất mới thấy kết quả. Từ `0.6.1`, SSO và scanner chạy đồng thời; sau khi scanner
+sẵn sàng, kiểm tra thiết bị và catalog testcase cũng chạy đồng thời. Heartbeat RADAR chỉ chạy sau
+khi có token và snapshot scanner vì đây là hai phụ thuộc bắt buộc.
 
 Scanner Manager chạy một instance trong mỗi phiên đăng nhập Windows. Nút đóng cửa sổ thu nhỏ ứng
 dụng xuống system tray. Menu tray cung cấp các thao tác nhanh: mở Manager, chạy Diagnostics, mở log,

@@ -15,7 +15,7 @@ _WINDOW_TITLE_PREFIX = "VNPAY RADAR Scanner Manager"
 
 def create_radar_icon(size: int = 64) -> Image.Image:
     """Create the shared RADAR window/tray icon at the requested size."""
-    image = Image.new("RGBA", (size, size), "#050A10")
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     margin = max(4, size // 10)
     center = size // 2
@@ -38,7 +38,7 @@ def create_radar_icon(size: int = 64) -> Image.Image:
         width=max(2, size // 18),
     )
     dot = max(3, size // 11)
-    draw.ellipse((center - dot, center - dot, center + dot, center + dot), fill="#F1F5F9")
+    draw.ellipse((center - dot, center - dot, center + dot, center + dot), fill="#E81D24")
     return image
 
 

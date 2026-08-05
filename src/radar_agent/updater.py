@@ -13,7 +13,9 @@ from tkinter import messagebox, ttk
 from radar_agent.desktop_theme import (
     BACKGROUND,
     BLUE_BRIGHT,
+    BORDER,
     GREEN,
+    INPUT,
     MUTED,
     RED,
     TEXT,
@@ -170,8 +172,8 @@ class UpdaterWindow(tk.Tk):
         style.configure(
             "Horizontal.TProgressbar",
             background=BLUE_BRIGHT,
-            troughcolor="#0E1828",
-            bordercolor="#0E1828",
+            troughcolor=INPUT,
+            bordercolor=BORDER,
         )
 
     def _build_ui(self) -> None:
@@ -203,7 +205,7 @@ class UpdaterWindow(tk.Tk):
                 highlightthickness=0,
             )
             marker.grid(row=index, column=0, padx=(0, 10), pady=5)
-            marker.create_oval(3, 3, 15, 15, fill="#334155", outline="")
+            marker.create_oval(3, 3, 15, 15, fill=BORDER, outline="")
             self.step_markers.append(marker)
             ttk.Label(steps, text=title, style="Step.TLabel").grid(
                 row=index,
@@ -254,7 +256,7 @@ class UpdaterWindow(tk.Tk):
             "done": GREEN,
             "active": BLUE_BRIGHT,
             "failed": RED,
-            "waiting": "#334155",
+            "waiting": BORDER,
         }
         for index, (marker, label) in enumerate(
             zip(self.step_markers, self.step_states, strict=True)

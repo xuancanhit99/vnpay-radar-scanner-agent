@@ -5,17 +5,17 @@ from PIL import ImageTk
 
 from radar_agent.desktop_shell import create_radar_icon
 
-BACKGROUND = "#050A10"
-SURFACE = "#0A1220"
-INPUT = "#0E1828"
-BORDER = "#1B3F63"
-TEXT = "#F1F5F9"
-MUTED = "#94A3B8"
+BACKGROUND = "#F3F6F9"
+SURFACE = "#FFFFFF"
+INPUT = "#F8FAFC"
+BORDER = "#D7E0E8"
+TEXT = "#172B3A"
+MUTED = "#64748B"
 BLUE = "#0056A7"
 BLUE_BRIGHT = "#006CC2"
 RED = "#E81D24"
 AMBER = "#F59E0B"
-GREEN = "#10B981"
+GREEN = "#087A55"
 
 
 def apply_window_icon(window: tk.Tk) -> None:
@@ -25,7 +25,7 @@ def apply_window_icon(window: tk.Tk) -> None:
 
 
 def configure_radar_theme(window: tk.Tk) -> ttk.Style:
-    """Apply the RADAR web color system to native ttk controls."""
+    """Apply the light RADAR color system to native ttk controls."""
     window.configure(background=BACKGROUND)
     style = ttk.Style(window)
     if "clam" in style.theme_names():
@@ -103,8 +103,8 @@ def configure_radar_theme(window: tk.Tk) -> ttk.Style:
     )
     style.map(
         "TNotebook.Tab",
-        background=[("selected", BLUE), ("active", INPUT), ("disabled", BACKGROUND)],
-        foreground=[("selected", "#FFFFFF"), ("active", TEXT), ("disabled", "#475569")],
+        background=[("selected", "#E7F1FA"), ("active", "#EEF4F8"), ("disabled", BACKGROUND)],
+        foreground=[("selected", BLUE), ("active", TEXT), ("disabled", "#94A3B8")],
     )
 
     style.configure(
@@ -119,22 +119,26 @@ def configure_radar_theme(window: tk.Tk) -> ttk.Style:
     )
     style.map(
         "TButton",
-        background=[("active", "#162A40"), ("pressed", "#203B58"), ("disabled", SURFACE)],
-        foreground=[("disabled", "#526174")],
+        background=[("active", "#E7EEF4"), ("pressed", "#DCE7F0"), ("disabled", "#EEF2F6")],
+        foreground=[("disabled", "#94A3B8")],
     )
     style.configure("Primary.TButton", background=BLUE, foreground="#FFFFFF", bordercolor=BLUE)
     style.map(
         "Primary.TButton",
-        background=[("active", BLUE_BRIGHT), ("pressed", "#004987"), ("disabled", "#16324D")],
-        foreground=[("disabled", "#70859A")],
+        background=[("active", BLUE_BRIGHT), ("pressed", "#004987"), ("disabled", "#B7C8D8")],
+        foreground=[("disabled", "#F8FAFC")],
     )
     style.configure(
         "Danger.TButton",
-        background="#3A171C",
-        foreground="#FFB4B8",
-        bordercolor="#6B222A",
+        background="#FFF1F2",
+        foreground="#B4232A",
+        bordercolor="#F2B8BC",
     )
-    style.map("Danger.TButton", background=[("active", "#582027"), ("pressed", "#6B222A")])
+    style.map(
+        "Danger.TButton",
+        background=[("active", "#FFE4E6"), ("pressed", "#FECDD3"), ("disabled", "#F8E8EA")],
+        foreground=[("disabled", "#B98A8E")],
+    )
 
     style.configure(
         "TEntry",
@@ -156,13 +160,13 @@ def configure_radar_theme(window: tk.Tk) -> ttk.Style:
     style.map(
         "TCheckbutton",
         background=[("active", BACKGROUND)],
-        foreground=[("disabled", "#526174")],
+        foreground=[("disabled", "#94A3B8")],
     )
     style.configure("Card.TCheckbutton", background=SURFACE, foreground=TEXT)
     style.map(
         "Card.TCheckbutton",
         background=[("active", SURFACE)],
-        foreground=[("disabled", "#526174")],
+        foreground=[("disabled", "#94A3B8")],
     )
 
     style.configure(
@@ -183,7 +187,7 @@ def configure_radar_theme(window: tk.Tk) -> ttk.Style:
         padding=(8, 8),
         font=("Segoe UI Semibold", 9),
     )
-    style.map("Treeview.Heading", background=[("active", "#162A40")])
+    style.map("Treeview.Heading", background=[("active", "#E7EEF4")])
     for orientation in ("Vertical", "Horizontal"):
         style.configure(
             f"{orientation}.TScrollbar",

@@ -1,3 +1,4 @@
+import asyncio
 import socket
 import ssl
 import time
@@ -9,7 +10,11 @@ import httpx
 
 from radar_agent import __version__
 from radar_agent.radar_client import RadarClient
-from radar_agent.scanner_client import ScannerClient
+from radar_agent.scanner_client import (
+    build_heartbeat_payload,
+    default_testcase_catalog,
+    normalize_testcase_catalog,
+)
 from radar_agent.settings import AgentSettings
 from radar_agent.token_provider import TokenProvider
 
@@ -25,6 +30,7 @@ class DiagnosticResult:
 
 DiagnosticStarted = Callable[[str, str], None]
 DiagnosticCompleted = Callable[[DiagnosticResult], None]
+_RESULT_ORDER = {key: index for index, key in enumerate(("sso", "scanner", "device", "radar"))}
 
 
 def _tls_verifier(verify_tls: bool) -> ssl.SSLContext | bool:
@@ -72,100 +78,144 @@ async def run_diagnostics(
         transport=transport,
     ) as client:
         token_provider = TokenProvider(settings, client)
-        token_ready = False
-        notify_started("sso", "VNPAY SSO")
-        started = time.monotonic()
-        try:
-            await token_provider.get_token()
-            token_ready = True
-            completed(
-                DiagnosticResult(
-                    "sso",
-                    "VNPAY SSO",
-                    True,
-                    "Client credentials token issued",
-                    int((time.monotonic() - started) * 1000),
-                )
-            )
-        except Exception as exc:
-            completed(
-                DiagnosticResult(
-                    "sso",
-                    "VNPAY SSO",
-                    False,
-                    _error_detail(exc),
-                    int((time.monotonic() - started) * 1000),
-                )
-            )
+        scanner_url = settings.scanner_url.rstrip("/")
 
-        scanner = ScannerClient(settings, client)
-        heartbeat_payload: dict[str, Any] | None = None
-        notify_started("scanner", "APK Scanner")
-        started = time.monotonic()
-        try:
-            response = await client.get(f"{settings.scanner_url.rstrip('/')}/health", timeout=5)
-            response.raise_for_status()
-            payload = response.json()
-            scanner_state = "busy" if payload.get("busy") else "ready"
-            completed(
-                DiagnosticResult(
-                    "scanner",
-                    "APK Scanner",
-                    True,
-                    f"Local API is {scanner_state}",
-                    int((time.monotonic() - started) * 1000),
+        async def check_sso() -> bool:
+            notify_started("sso", "VNPAY SSO")
+            started = time.monotonic()
+            try:
+                await token_provider.get_token()
+                completed(
+                    DiagnosticResult(
+                        "sso",
+                        "VNPAY SSO",
+                        True,
+                        "Client credentials token issued",
+                        int((time.monotonic() - started) * 1000),
+                    )
                 )
-            )
-        except Exception as exc:
-            completed(
-                DiagnosticResult(
-                    "scanner",
-                    "APK Scanner",
-                    False,
-                    _error_detail(exc),
-                    int((time.monotonic() - started) * 1000),
+                return True
+            except Exception as exc:
+                completed(
+                    DiagnosticResult(
+                        "sso",
+                        "VNPAY SSO",
+                        False,
+                        _error_detail(exc),
+                        int((time.monotonic() - started) * 1000),
+                    )
                 )
-            )
+                return False
 
-        notify_started("device", "Android device")
-        started = time.monotonic()
-        try:
-            response = await client.get(f"{settings.scanner_url.rstrip('/')}/device", timeout=20)
-            response.raise_for_status()
-            payload = response.json()
-            usb = payload.get("usb") or {}
-            wifi = payload.get("wifi") or {}
-            selected = usb if usb.get("online") else wifi
-            if not selected.get("online"):
-                raise RuntimeError("No authorized Android device detected")
-            serial = selected.get("serial") or "unknown serial"
-            completed(
-                DiagnosticResult(
-                    "device",
-                    "Android device",
-                    True,
-                    f"Connected: {serial}",
-                    int((time.monotonic() - started) * 1000),
+        async def check_device() -> dict[str, Any]:
+            notify_started("device", "Android device")
+            started = time.monotonic()
+            payload: dict[str, Any] = {}
+            try:
+                response = await client.get(f"{scanner_url}/device", timeout=20)
+                response.raise_for_status()
+                payload = response.json()
+                usb = payload.get("usb") or {}
+                wifi = payload.get("wifi") or {}
+                selected = usb if usb.get("online") else wifi
+                if not selected.get("online"):
+                    raise RuntimeError("No authorized Android device detected")
+                serial = selected.get("serial") or "unknown serial"
+                completed(
+                    DiagnosticResult(
+                        "device",
+                        "Android device",
+                        True,
+                        f"Connected: {serial}",
+                        int((time.monotonic() - started) * 1000),
+                    )
                 )
-            )
-        except Exception as exc:
-            completed(
-                DiagnosticResult(
-                    "device",
-                    "Android device",
-                    False,
-                    _error_detail(exc),
-                    int((time.monotonic() - started) * 1000),
+            except Exception as exc:
+                completed(
+                    DiagnosticResult(
+                        "device",
+                        "Android device",
+                        False,
+                        _error_detail(exc),
+                        int((time.monotonic() - started) * 1000),
+                    )
                 )
+            return payload
+
+        async def fetch_testcase_catalog() -> list[dict[str, Any]]:
+            try:
+                response = await client.get(f"{scanner_url}/testcases", timeout=5)
+                response.raise_for_status()
+                return normalize_testcase_catalog(response.json())
+            except (httpx.HTTPError, ValueError):
+                return default_testcase_catalog()
+
+        async def check_scanner() -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+            notify_started("scanner", "APK Scanner")
+            started = time.monotonic()
+            scanner_status = "unavailable"
+            try:
+                response = await client.get(f"{scanner_url}/health", timeout=5)
+                response.raise_for_status()
+                scanner_status = "busy" if response.json().get("busy") else "ready"
+                completed(
+                    DiagnosticResult(
+                        "scanner",
+                        "APK Scanner",
+                        True,
+                        f"Local API is {scanner_status}",
+                        int((time.monotonic() - started) * 1000),
+                    )
+                )
+            except Exception as exc:
+                completed(
+                    DiagnosticResult(
+                        "scanner",
+                        "APK Scanner",
+                        False,
+                        _error_detail(exc),
+                        int((time.monotonic() - started) * 1000),
+                    )
+                )
+
+            if scanner_status != "ready":
+                notify_started("device", "Android device")
+                reason = (
+                    "Skipped while APK Scanner is busy"
+                    if scanner_status == "busy"
+                    else "Skipped because APK Scanner is unavailable"
+                )
+                completed(
+                    DiagnosticResult(
+                        "device",
+                        "Android device",
+                        False,
+                        reason,
+                        0,
+                    )
+                )
+                return scanner_status, {}, default_testcase_catalog()
+
+            device_payload, testcase_catalog = await asyncio.gather(
+                check_device(),
+                fetch_testcase_catalog(),
             )
+            return scanner_status, device_payload, testcase_catalog
+
+        token_ready, scanner_snapshot = await asyncio.gather(check_sso(), check_scanner())
+        scanner_status, device_payload, testcase_catalog = scanner_snapshot
 
         notify_started("radar", "RADAR backend")
         if token_ready:
             started = time.monotonic()
             try:
-                heartbeat_payload = await scanner.heartbeat_payload(
+                heartbeat_payload = build_heartbeat_payload(
+                    settings,
                     hostname=socket.gethostname(),
                     version=__version__,
+                    scanner_status=scanner_status,
+                    device_payload=device_payload,
+                    testcase_catalog=testcase_catalog,
                 )
                 radar = RadarClient(settings, client, token_provider)
                 await radar.heartbeat(heartbeat_payload)
@@ -199,4 +249,4 @@ async def run_diagnostics(
                 )
             )
 
-    return results
+    return sorted(results, key=lambda result: _RESULT_ORDER[result.key])

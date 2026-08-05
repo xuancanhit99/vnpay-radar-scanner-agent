@@ -57,6 +57,15 @@ def _normalize_testcase_catalog(payload: Any) -> list[dict[str, Any]]:
     return catalog
 
 
+def normalize_testcase_catalog(payload: Any) -> list[dict[str, Any]]:
+    """Normalize the scanner catalog for callers that already own the probe lifecycle."""
+    return _normalize_testcase_catalog(payload)
+
+
+def default_testcase_catalog() -> list[dict[str, Any]]:
+    return [dict(testcase) for testcase in _LEGACY_TESTCASES]
+
+
 def _capability_status(
     testcase: dict[str, Any],
     *,
@@ -98,6 +107,51 @@ def _capability_status(
     }
 
 
+def build_heartbeat_payload(
+    settings: AgentSettings,
+    *,
+    hostname: str,
+    version: str,
+    scanner_status: str,
+    device_payload: dict[str, Any],
+    testcase_catalog: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build the RADAR heartbeat from a completed scanner probe snapshot."""
+    device_status = "disconnected"
+    device_serial = None
+    device_model = settings.device_model
+    usb = device_payload.get("usb") or {}
+    wifi = device_payload.get("wifi") or {}
+    selected = usb if usb.get("online") else wifi
+    if selected.get("online"):
+        device_status = "connected"
+        device_serial = selected.get("serial")
+        detected_model = str(device_payload.get("deviceModel") or "").strip()
+        if detected_model:
+            device_model = detected_model
+
+    capability_statuses = [
+        _capability_status(
+            testcase,
+            scanner_status=scanner_status,
+            device_payload=device_payload,
+        )
+        for testcase in testcase_catalog
+    ]
+    return {
+        "agent_id": settings.id,
+        "display_name": settings.display_name,
+        "hostname": hostname,
+        "version": version,
+        "scanner_status": scanner_status,
+        "device_status": device_status,
+        "device_serial": device_serial,
+        "device_model": device_model,
+        "capabilities": [item["testcase_id"] for item in capability_statuses],
+        "capability_statuses": capability_statuses,
+    }
+
+
 class ScannerClient:
     def __init__(self, settings: AgentSettings, client: httpx.AsyncClient):
         self._settings = settings
@@ -109,9 +163,6 @@ class ScannerClient:
 
     async def heartbeat_payload(self, *, hostname: str, version: str) -> dict[str, Any]:
         scanner_status = "unavailable"
-        device_status = "disconnected"
-        device_serial = None
-        device_model = self._settings.device_model
         device_payload = self._last_device_payload
         testcase_catalog = self._last_testcase_catalog
         try:
@@ -149,37 +200,14 @@ class ScannerClient:
         except (httpx.HTTPError, ValueError):
             scanner_status = "unavailable"
 
-        usb = device_payload.get("usb") or {}
-        wifi = device_payload.get("wifi") or {}
-        selected = usb if usb.get("online") else wifi
-        if selected.get("online"):
-            device_status = "connected"
-            device_serial = selected.get("serial")
-            detected_model = str(device_payload.get("deviceModel") or "").strip()
-            if detected_model:
-                device_model = detected_model
-
-        capability_statuses = [
-            _capability_status(
-                testcase,
-                scanner_status=scanner_status,
-                device_payload=device_payload,
-            )
-            for testcase in testcase_catalog
-        ]
-
-        return {
-            "agent_id": self._settings.id,
-            "display_name": self._settings.display_name,
-            "hostname": hostname,
-            "version": version,
-            "scanner_status": scanner_status,
-            "device_status": device_status,
-            "device_serial": device_serial,
-            "device_model": device_model,
-            "capabilities": [item["testcase_id"] for item in capability_statuses],
-            "capability_statuses": capability_statuses,
-        }
+        return build_heartbeat_payload(
+            self._settings,
+            hostname=hostname,
+            version=version,
+            scanner_status=scanner_status,
+            device_payload=device_payload,
+            testcase_catalog=testcase_catalog,
+        )
 
     async def run_scan(self, job: ScannerJob) -> JobResult:
         async with self._probe_lock:

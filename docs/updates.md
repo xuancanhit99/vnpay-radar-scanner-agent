@@ -35,6 +35,12 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.6.1` chuyển Manager và Updater về giao diện sáng, giữ màu xanh VNPAY làm điểm nhấn.
+  Diagnostics chạy đồng thời các probe độc lập và tái sử dụng cùng snapshot cho heartbeat, giảm
+  request lặp. RADAR heartbeat vẫn chờ token và dữ liệu scanner bắt buộc; khi scanner đang bận,
+  Diagnostics không gọi endpoint thiết bị để tránh ảnh hưởng testcase đang chạy. Setup cũng chờ
+  toàn bộ process Manager thoát và kiểm tra file cũ đã được giải phóng trước khi thay thế; nếu file
+  vẫn bị khóa, quá trình nâng cấp báo lỗi thay vì ghi nhận thành công sai.
 - Bản `0.6.0` đồng bộ Scanner Manager/Updater với RADAR dark theme, chuyển truy vấn trạng thái
   Windows Service khỏi UI thread và chỉ tải tab Logs khi người dùng mở. Diagnostics cập nhật từng
   bước `WAITING/RUNNING/PASSED/FAILED` thay vì chờ toàn bộ luồng hoàn tất.

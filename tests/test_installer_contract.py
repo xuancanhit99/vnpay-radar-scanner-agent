@@ -69,6 +69,17 @@ def test_installer_does_not_kill_its_own_process_tree() -> None:
     assert all(" /T " not in line for line in taskkill_lines)
 
 
+def test_installer_waits_for_manager_file_to_be_released() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    close_manager = script.index("Get-Process -Name radar-scanner-manager")
+    delete_manager = script.index('Delete "$INSTDIR\\radar-scanner-manager.exe"')
+    copy_files = script.index('File /r "${SOURCE_DIR}\\*"')
+    assert close_manager < delete_manager < copy_files
+    assert "manager_file_locked:" in script
+    assert "Scanner Manager executable is still locked" in script
+
+
 def test_manager_uses_reinstall_service_label() -> None:
     manager_script = (
         Path(__file__).parents[1] / "src" / "radar_agent" / "manager.py"

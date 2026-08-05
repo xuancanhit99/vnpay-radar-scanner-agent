@@ -7,10 +7,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.6.0"
+  !define APP_VERSION "0.6.1"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.6.0.0"
+  !define APP_FILE_VERSION "0.6.1.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -95,7 +95,13 @@ Section "RADAR Scanner Agent" SEC_MAIN
   nsExec::ExecToStack 'taskkill.exe /IM "radar-scanner-manager.exe" /F'
   Pop $0
   Pop $1
-  Sleep 1000
+  nsExec::ExecToStack 'powershell.exe -NoProfile -NonInteractive -Command "Start-Sleep -Seconds 2; if (Get-Process -Name radar-scanner-manager -ErrorAction SilentlyContinue) { Get-Process -Name radar-scanner-manager -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction Stop; Start-Sleep -Seconds 2 }; if (Get-Process -Name radar-scanner-manager -ErrorAction SilentlyContinue) { exit 1 }"'
+  Pop $0
+  Pop $1
+  ${If} $0 != 0
+    StrCpy $R7 "Could not close Scanner Manager before replacing application files."
+    Abort "$R7"
+  ${EndIf}
 
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "checking_service"
   StrCpy $R9 "0"
@@ -152,6 +158,16 @@ service_precheck_complete:
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent"
   SetRegView 64
   SetOutPath "$INSTDIR"
+  IfFileExists "$INSTDIR\radar-scanner-manager.exe" 0 manager_file_ready
+  ClearErrors
+  Delete "$INSTDIR\radar-scanner-manager.exe"
+  IfErrors manager_file_locked manager_file_ready
+
+manager_file_locked:
+  StrCpy $R7 "Scanner Manager executable is still locked. Close it and run Setup again."
+  Abort "$R7"
+
+manager_file_ready:
   File /r "${SOURCE_DIR}\*"
 
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "InstallDirectory" "$INSTDIR"
