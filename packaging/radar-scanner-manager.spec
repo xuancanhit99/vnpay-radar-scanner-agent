@@ -4,12 +4,17 @@ from pathlib import Path
 
 project_root = Path(SPECPATH).parent
 version_file = os.environ.get("RADAR_MANAGER_VERSION_FILE")
+icon_file = project_root / "logo" / "icon.ico"
+brand_data = [
+    (str(project_root / "logo" / "icon.svg"), "logo"),
+    (str(project_root / "logo" / "logo.svg"), "logo"),
+]
 
 analysis = Analysis(
     [str(project_root / "src" / "radar_agent" / "manager_main.py")],
     pathex=[str(project_root / "src")],
     binaries=[],
-    datas=[],
+    datas=brand_data,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,4 +40,5 @@ executable = EXE(
     disable_windowed_traceback=False,
     uac_admin=True,
     version=version_file,
+    icon=str(icon_file),
 )

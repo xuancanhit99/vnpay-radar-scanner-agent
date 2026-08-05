@@ -2,7 +2,6 @@ import ctypes
 import os
 from collections.abc import Callable
 
-from PIL import Image, ImageDraw
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
 
 _ERROR_ALREADY_EXISTS = 183
@@ -10,35 +9,6 @@ _SW_SHOW = 5
 _SW_RESTORE = 9
 _MUTEX_NAME = r"Local\VNPAYRadarScannerManager"
 _WINDOW_TITLE_PREFIX = "VNPAY RADAR Scanner Manager"
-
-
-def create_radar_icon(size: int = 64) -> Image.Image:
-    """Create the shared RADAR window/tray icon at the requested size."""
-    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    margin = max(4, size // 10)
-    center = size // 2
-    blue = "#006CC2"
-    muted_blue = "#0056A7"
-
-    draw.ellipse(
-        (margin, margin, size - margin, size - margin),
-        outline=blue,
-        width=max(2, size // 18),
-    )
-    draw.ellipse(
-        (center - size // 5, center - size // 5, center + size // 5, center + size // 5),
-        outline=muted_blue,
-        width=max(1, size // 24),
-    )
-    draw.line(
-        (center, center, size - margin - 2, margin + 4),
-        fill="#10B981",
-        width=max(2, size // 18),
-    )
-    dot = max(3, size // 11)
-    draw.ellipse((center - dot, center - dot, center + dot, center + dot), fill="#E81D24")
-    return image
 
 
 class SingleInstance:

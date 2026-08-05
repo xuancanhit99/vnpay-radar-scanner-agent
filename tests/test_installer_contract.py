@@ -122,3 +122,12 @@ def test_installer_verifies_all_application_executables() -> None:
     assert 'IfFileExists "$INSTDIR\\radar-scanner-manager.exe"' in script
     assert 'IfFileExists "$INSTDIR\\radar-scanner-updater.exe"' in script
     assert 'IfFileExists "$INSTDIR\\agent\\radar-scanner-agent.exe"' in script
+
+
+def test_installer_uses_official_brand_icon() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    assert '!define MUI_ICON "${BRAND_ICON}"' in script
+    assert 'Icon "${BRAND_ICON}"' in script
+    assert 'UninstallIcon "${BRAND_ICON}"' in script
+    assert '"DisplayIcon" "$INSTDIR\\radar-scanner-manager.exe,0"' in script

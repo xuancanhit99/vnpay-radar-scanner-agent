@@ -35,6 +35,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.4` thay toàn bộ icon vẽ tay bằng bộ nhận diện RADAR/VNPAY chính thức cho Manager,
+  Updater, system tray, executable, installer, shortcut và danh sách ứng dụng Windows.
 - Bản `0.7.3` cân đối lại chiều rộng các cột Diagnostics, giữ cột Detail co giãn và căn phải
   latency để người dùng so sánh thời gian phản hồi dễ hơn.
 - Bản `0.7.2` bổ sung spinner động cho Diagnostics, đồng bộ giao diện scrollbar ngang với

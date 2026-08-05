@@ -2,15 +2,21 @@ Unicode True
 RequestExecutionLevel admin
 ManifestDPIAware true
 
+!ifndef BRAND_ICON
+  !error "BRAND_ICON is required"
+!endif
+!define MUI_ICON "${BRAND_ICON}"
+!define MUI_UNICON "${BRAND_ICON}"
+
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.7.3"
+  !define APP_VERSION "0.7.4"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.7.3.0"
+  !define APP_FILE_VERSION "0.7.4.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -24,6 +30,8 @@ ManifestDPIAware true
 !define SERVICE_NAME "VNPAYRadarScannerAgent"
 
 Name "${PRODUCT_NAME}"
+Icon "${BRAND_ICON}"
+UninstallIcon "${BRAND_ICON}"
 OutFile "${OUTPUT_DIR}\VNPAYRadarScannerAgent-Setup-${APP_VERSION}-x64.exe"
 VIProductVersion "${APP_FILE_VERSION}"
 VIAddVersionKey /LANG=1033 "CompanyName" "${COMPANY_NAME}"
@@ -174,6 +182,7 @@ manager_file_ready:
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayName" "${PRODUCT_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayVersion" "${APP_VERSION}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "Publisher" "${COMPANY_NAME}"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "DisplayIcon" "$INSTDIR\radar-scanner-manager.exe,0"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent" "NoModify" 1

@@ -3,15 +3,8 @@ import uuid
 
 import pytest
 
-from radar_agent.desktop_shell import SingleInstance, create_radar_icon
+from radar_agent.desktop_shell import SingleInstance
 from radar_agent.desktop_theme import BACKGROUND, INPUT, SURFACE
-
-
-def test_radar_icon_has_expected_size_and_alpha_channel() -> None:
-    icon = create_radar_icon(48)
-
-    assert icon.size == (48, 48)
-    assert icon.mode == "RGBA"
 
 
 def test_desktop_theme_uses_light_surfaces() -> None:

@@ -3,7 +3,12 @@ import os
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCheckBox, QHeaderView
 
-from radar_agent.desktop_theme import configure_radar_theme
+from radar_agent.desktop_theme import (
+    branding_asset_path,
+    configure_radar_theme,
+    radar_icon,
+    vnpay_logo_pixmap,
+)
 from radar_agent.manager import ManagerWindow
 from radar_agent.update_service import UpdateInfo
 
@@ -30,6 +35,7 @@ def test_manager_builds_modern_navigation_pages(tmp_path, monkeypatch) -> None:
         ]
         assert window.install_button.text() == "Install / Reinstall"
         assert window.windowTitle().startswith("VNPAY RADAR Scanner Manager")
+        assert not window.vnpay_brand_logo.pixmap().isNull()
         application.processEvents()
     finally:
         window._exiting = True
@@ -64,10 +70,10 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     application = _application()
     window = ManagerWindow(start_background_tasks=False)
 
-    current = UpdateInfo("0.7.3", "0.7.3", False, "", "", "", "")
+    current = UpdateInfo("0.7.4", "0.7.4", False, "", "", "", "")
     available = UpdateInfo(
-        "0.7.3",
         "0.7.4",
+        "0.7.5",
         True,
         "https://github.com/example/release",
         "setup.exe",
@@ -86,6 +92,15 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     finally:
         window._exiting = True
         window.close()
+
+
+def test_official_brand_assets_render() -> None:
+    _application()
+
+    assert branding_asset_path("icon.svg").is_file()
+    assert branding_asset_path("logo.svg").is_file()
+    assert not radar_icon(64).pixmap(64, 64).isNull()
+    assert not vnpay_logo_pixmap(121).isNull()
 
 
 def test_diagnostics_button_uses_animated_running_state(tmp_path, monkeypatch) -> None:

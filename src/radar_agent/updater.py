@@ -31,6 +31,8 @@ from radar_agent.desktop_theme import (
     RED,
     apply_window_icon,
     configure_radar_theme,
+    radar_icon,
+    vnpay_logo_pixmap,
 )
 from radar_agent.runtime_paths import program_data_directory
 from radar_agent.update_service import InstallerStatus, read_installer_status
@@ -143,14 +145,28 @@ class UpdaterWindow(QWidget):
         root.setContentsMargins(28, 24, 28, 22)
         root.setSpacing(0)
 
+        header = QHBoxLayout()
+        header.setSpacing(12)
+        product_icon = QLabel()
+        product_icon.setPixmap(radar_icon(44).pixmap(44, 44))
+        product_icon.setFixedSize(44, 44)
+        header.addWidget(product_icon)
+        heading = QVBoxLayout()
+        heading.setSpacing(1)
         title = QLabel("Updating Scanner Agent")
         title.setObjectName("PageTitle")
         subtitle = QLabel(
             f"Installing version {self.target_version}. Do not turn off this computer."
         )
         subtitle.setObjectName("PageSubtitle")
-        root.addWidget(title)
-        root.addWidget(subtitle)
+        heading.addWidget(title)
+        heading.addWidget(subtitle)
+        header.addLayout(heading, 1)
+        vnpay_logo = QLabel()
+        vnpay_logo.setPixmap(vnpay_logo_pixmap(101))
+        vnpay_logo.setFixedSize(101, 42)
+        header.addWidget(vnpay_logo)
+        root.addLayout(header)
         root.addSpacing(20)
 
         self.progress = QProgressBar()

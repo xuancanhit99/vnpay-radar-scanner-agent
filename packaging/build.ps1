@@ -21,6 +21,7 @@ $winSwDownload = Join-Path $env:TEMP "WinSW-x64-v$winSwVersion.exe"
 $agentVersionFile = Join-Path $env:TEMP "radar-agent-version-info.txt"
 $managerVersionFile = Join-Path $env:TEMP "radar-manager-version-info.txt"
 $updaterVersionFile = Join-Path $env:TEMP "radar-updater-version-info.txt"
+$brandIcon = Join-Path $repositoryRoot "logo\icon.ico"
 
 function New-PyInstallerVersionFile(
     [string]$Path,
@@ -167,6 +168,7 @@ try {
             "/WX" `
             "/DAPP_VERSION=$version" `
             "/DAPP_FILE_VERSION=$fileVersion" `
+            "/DBRAND_ICON=$brandIcon" `
             "/DSOURCE_DIR=$bundleDirectory" `
             "/DOUTPUT_DIR=$OutputDirectory" `
             (Join-Path $PSScriptRoot "installer.nsi")

@@ -1,10 +1,10 @@
-from io import BytesIO
+import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleOption, QWidget
-
-from radar_agent.desktop_shell import create_radar_icon
 
 BACKGROUND = "#F5F7FA"
 SURFACE = "#FFFFFF"
@@ -284,12 +284,31 @@ QMenu::separator {{ height: 1px; background: {BORDER}; margin: 5px 8px; }}
 """
 
 
+def branding_asset_path(name: str) -> Path:
+    root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+    return root / "logo" / name
+
+
+def _svg_pixmap(name: str, width: int, height: int) -> QPixmap:
+    renderer = QSvgRenderer(str(branding_asset_path(name)))
+    pixmap = QPixmap(width, height)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    if not renderer.isValid():
+        return pixmap
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    renderer.render(painter)
+    painter.end()
+    return pixmap
+
+
 def radar_icon(size: int = 64) -> QIcon:
-    buffer = BytesIO()
-    create_radar_icon(size).save(buffer, format="PNG")
-    pixmap = QPixmap()
-    pixmap.loadFromData(buffer.getvalue(), "PNG")
-    return QIcon(pixmap)
+    return QIcon(_svg_pixmap("icon.svg", size, size))
+
+
+def vnpay_logo_pixmap(width: int = 101) -> QPixmap:
+    height = max(1, round(width * 42 / 101))
+    return _svg_pixmap("logo.svg", width, height)
 
 
 def apply_window_icon(window: QWidget) -> None:

@@ -61,6 +61,7 @@ from radar_agent.desktop_theme import (
     apply_window_icon,
     configure_radar_theme,
     radar_icon,
+    vnpay_logo_pixmap,
 )
 from radar_agent.diagnostics import DiagnosticResult, run_diagnostics
 from radar_agent.runtime_paths import (
@@ -237,8 +238,8 @@ class ManagerWindow(QMainWindow):
         brand = QHBoxLayout()
         brand.setSpacing(10)
         logo = QLabel()
-        logo.setPixmap(radar_icon(40).pixmap(40, 40))
-        logo.setFixedSize(40, 40)
+        logo.setPixmap(radar_icon(44).pixmap(44, 44))
+        logo.setFixedSize(44, 44)
         brand.addWidget(logo)
         brand_text = QVBoxLayout()
         brand_text.setSpacing(0)
@@ -271,6 +272,13 @@ class ManagerWindow(QMainWindow):
             self.nav_buttons.append(button)
         self.nav_buttons[0].setChecked(True)
         sidebar_layout.addStretch()
+        self.vnpay_brand_logo = QLabel()
+        self.vnpay_brand_logo.setObjectName("VnpayBrandLogo")
+        self.vnpay_brand_logo.setPixmap(vnpay_logo_pixmap(121))
+        self.vnpay_brand_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.vnpay_brand_logo.setToolTip("VNPAY")
+        sidebar_layout.addWidget(self.vnpay_brand_logo)
+        sidebar_layout.addSpacing(8)
         version = QLabel(f"VERSION {__version__}")
         version.setObjectName("VersionLabel")
         version.setAlignment(Qt.AlignmentFlag.AlignCenter)
