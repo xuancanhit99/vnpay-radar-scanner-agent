@@ -35,6 +35,7 @@ def test_manager_builds_modern_navigation_pages(tmp_path, monkeypatch) -> None:
             "Logs",
         ]
         assert window.install_button.text() == "Install / Reinstall"
+        assert not hasattr(window, "device_model")
         assert window.windowTitle().startswith("VNPAY RADAR Scanner Manager")
         assert not window.vnpay_brand_logo.pixmap().isNull()
         application.processEvents()

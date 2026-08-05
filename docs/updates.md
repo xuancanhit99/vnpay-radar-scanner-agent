@@ -35,6 +35,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.7` tự nhận diện tên thiết bị từ ADB với APK Scanner cũ, cache theo serial phần cứng
+  và bỏ trường nhập model khỏi Manager. `Android Device` chỉ còn là fallback nội bộ.
 - Bản `0.7.6` khai báo AppUserModelID ổn định, dùng ICO đa kích thước tại runtime và đặt
   icon riêng cho shortcut/Apps & Features để tránh Windows Shell giữ icon cũ sau cập nhật.
 - Bản `0.7.5` chuyển trạng thái và progress bar tải bản cập nhật vào card **Software update**,

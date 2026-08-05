@@ -26,7 +26,6 @@ qua biến môi trường của tiến trình.
 | `RADAR_AGENT_CLIENT_ID` | Có | `vnpay-radar-agent` | Client ID confidential có service account. |
 | `RADAR_AGENT_CLIENT_SECRET` | Chỉ khi khởi tạo | Rỗng | Secret dạng rõ dùng khi chạy từ source hoặc cài service. Tuyệt đối không commit hoặc phân phối giá trị này. |
 | `RADAR_AGENT_CLIENT_SECRET_FILE` | Được quản lý tự động | Rỗng | Đường dẫn tới secret nhị phân được DPAPI bảo vệ. Do Manager/service installer thiết lập. |
-| `RADAR_AGENT_DEVICE_MODEL` | Có | `Android Device` | Nhãn fallback khi APK Scanner không tự đọc được model thật từ thiết bị. |
 | `RADAR_AGENT_DATABASE_PATH` | Có | `./agent.db` | SQLite outbox lưu kết quả. Bản cài service ghi đè bằng đường dẫn trong `ProgramData`. |
 | `RADAR_AGENT_VERIFY_TLS` | Có | `true` | Kiểm tra chứng thư cho kết nối HTTPS tới VNPAY SSO và RADAR. |
 | `RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS` | Không | `10`, khoảng `5..30` | Chu kỳ báo trạng thái Agent/scanner/thiết bị, chạy độc lập với bài quét. |
@@ -36,7 +35,11 @@ qua biến môi trường của tiến trình.
 | `RADAR_AGENT_RETRY_DELAY_SECONDS` | Không | `5`, khoảng `1..60` | Thời gian chờ sau khi một vòng lặp Agent lỗi trước khi thử lại. |
 
 Các giá trị dạng code ở trên là mặc định của chương trình. Dùng `.env.example` làm mẫu cấu
-hình portable; file này chủ động sử dụng định danh máy và thiết bị ở dạng tổng quát.
+hình portable; file này chủ động sử dụng định danh máy ở dạng tổng quát.
+
+Model thiết bị không phải là cấu hình do người dùng nhập. Agent tự đọc tên thương mại hoặc model
+từ ADB server cục bộ, cache theo serial phần cứng và gửi lên RADAR. `Android Device` chỉ được dùng
+nội bộ khi thiết bị chưa kết nối hoặc ADB không trả được thông tin model.
 
 ## Ví dụ
 
@@ -49,7 +52,6 @@ RADAR_AGENT_TOKEN_URL=https://sso.example.vn/realms/REALM/protocol/openid-connec
 RADAR_AGENT_CLIENT_ID=vnpay-radar-agent
 RADAR_AGENT_CLIENT_SECRET=
 RADAR_AGENT_CLIENT_SECRET_FILE=
-RADAR_AGENT_DEVICE_MODEL=Android Device
 RADAR_AGENT_DATABASE_PATH=./agent.db
 RADAR_AGENT_VERIFY_TLS=true
 RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS=10

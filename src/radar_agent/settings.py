@@ -24,7 +24,6 @@ class AgentSettings(BaseSettings):
     client_id: str = "vnpay-radar-agent"
     client_secret: str = ""
     client_secret_file: Path | None = None
-    device_model: str = "Android Device"
     database_path: Path = Path("./agent.db")
     verify_tls: bool = True
     heartbeat_interval_seconds: int = Field(default=10, ge=5, le=30)

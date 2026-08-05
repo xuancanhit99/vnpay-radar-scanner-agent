@@ -1,10 +1,20 @@
 import asyncio
+import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 
+from radar_agent.device_identity import (
+    DEFAULT_DEVICE_MODEL,
+    normalize_device_model,
+    resolve_adb_device_model,
+)
 from radar_agent.models import JobResult, ScannerJob
 from radar_agent.settings import AgentSettings
+
+_LOGGER = logging.getLogger(__name__)
+DeviceModelResolver = Callable[[str], Awaitable[str | None]]
 
 _LEGACY_TESTCASES = [
     {
@@ -115,20 +125,17 @@ def build_heartbeat_payload(
     scanner_status: str,
     device_payload: dict[str, Any],
     testcase_catalog: list[dict[str, Any]],
+    device_model: str | None,
 ) -> dict[str, Any]:
     """Build the RADAR heartbeat from a completed scanner probe snapshot."""
     device_status = "disconnected"
     device_serial = None
-    device_model = settings.device_model
     usb = device_payload.get("usb") or {}
     wifi = device_payload.get("wifi") or {}
     selected = usb if usb.get("online") else wifi
     if selected.get("online"):
         device_status = "connected"
         device_serial = selected.get("serial")
-        detected_model = str(device_payload.get("deviceModel") or "").strip()
-        if detected_model:
-            device_model = detected_model
 
     capability_statuses = [
         _capability_status(
@@ -146,20 +153,68 @@ def build_heartbeat_payload(
         "scanner_status": scanner_status,
         "device_status": device_status,
         "device_serial": device_serial,
-        "device_model": device_model,
+        "device_model": normalize_device_model(device_model) or DEFAULT_DEVICE_MODEL,
         "capabilities": [item["testcase_id"] for item in capability_statuses],
         "capability_statuses": capability_statuses,
     }
 
 
 class ScannerClient:
-    def __init__(self, settings: AgentSettings, client: httpx.AsyncClient):
+    def __init__(
+        self,
+        settings: AgentSettings,
+        client: httpx.AsyncClient,
+        *,
+        device_model_resolver: DeviceModelResolver | None = None,
+    ):
         self._settings = settings
         self._client = client
+        self._device_model_resolver = device_model_resolver or resolve_adb_device_model
         self._probe_lock = asyncio.Lock()
         self._scan_in_progress = False
         self._last_device_payload: dict[str, Any] = {}
         self._last_testcase_catalog = list(_LEGACY_TESTCASES)
+        self._device_models: dict[str, str] = {}
+
+    async def _resolve_device_model(
+        self,
+        device_payload: dict[str, Any],
+        *,
+        scanner_status: str,
+    ) -> str | None:
+        usb = device_payload.get("usb") or {}
+        wifi = device_payload.get("wifi") or {}
+        selected = usb if usb.get("online") else wifi
+        selected_serial = normalize_device_model(selected.get("serial"))
+        identity = (
+            normalize_device_model(device_payload.get("hardwareSerial")) or selected_serial
+        )
+
+        reported_model = normalize_device_model(device_payload.get("deviceModel"))
+        if reported_model:
+            if identity:
+                self._device_models[identity] = reported_model
+            return reported_model
+
+        if identity and identity in self._device_models:
+            return self._device_models[identity]
+        if scanner_status == "busy" or not selected.get("online") or not selected_serial:
+            return None
+
+        try:
+            detected_model = normalize_device_model(
+                await self._device_model_resolver(selected_serial)
+            )
+        except Exception as exc:
+            _LOGGER.debug(
+                "Could not resolve Android model for ADB serial %s: %s",
+                selected_serial,
+                exc,
+            )
+            return None
+        if detected_model:
+            self._device_models[identity or selected_serial] = detected_model
+        return detected_model
 
     async def heartbeat_payload(self, *, hostname: str, version: str) -> dict[str, Any]:
         scanner_status = "unavailable"
@@ -200,6 +255,10 @@ class ScannerClient:
         except (httpx.HTTPError, ValueError):
             scanner_status = "unavailable"
 
+        device_model = await self._resolve_device_model(
+            device_payload,
+            scanner_status=scanner_status,
+        )
         return build_heartbeat_payload(
             self._settings,
             hostname=hostname,
@@ -207,6 +266,7 @@ class ScannerClient:
             scanner_status=scanner_status,
             device_payload=device_payload,
             testcase_catalog=testcase_catalog,
+            device_model=device_model,
         )
 
     async def run_scan(self, job: ScannerJob) -> JobResult:

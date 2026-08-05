@@ -12,7 +12,6 @@ _CONFIG_FIELDS = (
     ("scanner_url", "RADAR_AGENT_SCANNER_URL"),
     ("token_url", "RADAR_AGENT_TOKEN_URL"),
     ("client_id", "RADAR_AGENT_CLIENT_ID"),
-    ("device_model", "RADAR_AGENT_DEVICE_MODEL"),
     ("database_path", "RADAR_AGENT_DATABASE_PATH"),
     ("verify_tls", "RADAR_AGENT_VERIFY_TLS"),
     ("heartbeat_interval_seconds", "RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS"),

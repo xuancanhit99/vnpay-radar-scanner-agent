@@ -514,7 +514,6 @@ class ManagerWindow(QMainWindow):
         self.client_secret = self._line_edit()
         self.client_secret.setEchoMode(QLineEdit.EchoMode.Password)
         self.client_secret.setPlaceholderText("Leave blank to keep the protected value")
-        self.device_model = self._line_edit("Android Device")
         self.heartbeat_interval = self._spinbox(5, 30)
         self.poll_wait = self._spinbox(0, 25)
         self.lease_interval = self._spinbox(5, 30)
@@ -529,7 +528,6 @@ class ManagerWindow(QMainWindow):
             ("SSO token URL", self.token_url),
             ("Client ID", self.client_id),
             ("Client secret", self.client_secret),
-            ("Device model fallback", self.device_model),
             ("Heartbeat interval (seconds)", self.heartbeat_interval),
             ("Claim wait (seconds)", self.poll_wait),
             ("Lease renewal (seconds)", self.lease_interval),
@@ -691,7 +689,6 @@ class ManagerWindow(QMainWindow):
         self.token_url.setText(settings.token_url)
         self.client_id.setText(settings.client_id)
         self.client_secret.clear()
-        self.device_model.setText(settings.device_model)
         self.verify_tls.setChecked(settings.verify_tls)
         self.heartbeat_interval.setValue(settings.heartbeat_interval_seconds)
         self.poll_wait.setValue(settings.poll_wait_seconds)
@@ -711,7 +708,6 @@ class ManagerWindow(QMainWindow):
             client_id=self.client_id.text().strip(),
             client_secret=self.client_secret.text(),
             client_secret_file=secret_file if secret_file.exists() else None,
-            device_model=self.device_model.text().strip(),
             database_path=self._config_path.parent / "agent.db",
             verify_tls=self.verify_tls.isChecked(),
             heartbeat_interval_seconds=self.heartbeat_interval.value(),

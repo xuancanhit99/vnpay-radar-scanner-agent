@@ -42,6 +42,7 @@ def test_plaintext_bootstrap_is_only_used_for_service_install() -> None:
 
     assert "RADAR_AGENT_CLIENT_SECRET=bootstrap-secret" in content
     assert "RADAR_AGENT_CLIENT_SECRET_FILE=" not in content
+    assert "RADAR_AGENT_DEVICE_MODEL=" not in content
     assert "RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS=10" in content
 
 

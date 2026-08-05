@@ -33,7 +33,13 @@ async def test_heartbeat_uses_detected_device_model() -> None:
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_uses_configured_model_with_older_scanner_api() -> None:
+async def test_heartbeat_detects_model_through_adb_with_older_scanner_api() -> None:
+    resolved_serials: list[str] = []
+
+    async def resolve_model(serial: str) -> str | None:
+        resolved_serials.append(serial)
+        return "Xiaomi 13"
+
     async def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/health":
             return httpx.Response(200, json={"busy": False})
@@ -42,18 +48,79 @@ async def test_heartbeat_uses_configured_model_with_older_scanner_api() -> None:
             json={"usb": {"online": True, "serial": "device-001"}},
         )
 
-    settings = AgentSettings(
-        _env_file=None,
-        scanner_url="http://scanner.local",
-        device_model="Configured Device",
-    )
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        payload = await ScannerClient(settings, client).heartbeat_payload(
+        payload = await ScannerClient(
+            settings,
+            client,
+            device_model_resolver=resolve_model,
+        ).heartbeat_payload(
             hostname="WINDOWS-LAB",
             version="0.3.2",
         )
 
-    assert payload["device_model"] == "Configured Device"
+    assert resolved_serials == ["device-001"]
+    assert payload["device_model"] == "Xiaomi 13"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_uses_internal_fallback_when_adb_model_is_unavailable() -> None:
+    async def resolve_model(_serial: str) -> str | None:
+        return None
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"busy": False})
+        return httpx.Response(
+            200,
+            json={"usb": {"online": True, "serial": "device-001"}},
+        )
+
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        payload = await ScannerClient(
+            settings,
+            client,
+            device_model_resolver=resolve_model,
+        ).heartbeat_payload(hostname="WINDOWS-LAB", version="0.7.7")
+
+    assert payload["device_model"] == "Android Device"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_caches_adb_model_by_hardware_serial() -> None:
+    device_connected = True
+    resolved_serials: list[str] = []
+
+    async def resolve_model(serial: str) -> str | None:
+        resolved_serials.append(serial)
+        return "Xiaomi 13"
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"busy": False})
+        if request.url.path == "/device":
+            return httpx.Response(
+                200,
+                json={
+                    "hardwareSerial": "314ebbfe",
+                    "usb": {"online": device_connected, "serial": "314ebbfe"},
+                    "wifi": {"online": False, "serial": None},
+                },
+            )
+        return httpx.Response(404)
+
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        scanner = ScannerClient(settings, client, device_model_resolver=resolve_model)
+        connected = await scanner.heartbeat_payload(hostname="WINDOWS-LAB", version="0.7.7")
+        device_connected = False
+        disconnected = await scanner.heartbeat_payload(hostname="WINDOWS-LAB", version="0.7.7")
+
+    assert connected["device_model"] == "Xiaomi 13"
+    assert disconnected["device_status"] == "disconnected"
+    assert disconnected["device_model"] == "Xiaomi 13"
+    assert resolved_serials == ["314ebbfe"]
 
 
 @pytest.mark.asyncio
