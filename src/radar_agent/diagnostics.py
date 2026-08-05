@@ -1,5 +1,4 @@
 import asyncio
-import socket
 import ssl
 import time
 from collections.abc import Callable
@@ -8,13 +7,7 @@ from typing import Any
 
 import httpx
 
-from radar_agent import __version__
 from radar_agent.radar_client import RadarClient
-from radar_agent.scanner_client import (
-    build_heartbeat_payload,
-    default_testcase_catalog,
-    normalize_testcase_catalog,
-)
 from radar_agent.settings import AgentSettings
 from radar_agent.token_provider import TokenProvider
 
@@ -142,15 +135,7 @@ async def run_diagnostics(
                 )
             return payload
 
-        async def fetch_testcase_catalog() -> list[dict[str, Any]]:
-            try:
-                response = await client.get(f"{scanner_url}/testcases", timeout=5)
-                response.raise_for_status()
-                return normalize_testcase_catalog(response.json())
-            except (httpx.HTTPError, ValueError):
-                return default_testcase_catalog()
-
-        async def check_scanner() -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+        async def check_scanner() -> None:
             notify_started("scanner", "APK Scanner")
             started = time.monotonic()
             scanner_status = "unavailable"
@@ -194,37 +179,34 @@ async def run_diagnostics(
                         0,
                     )
                 )
-                return scanner_status, {}, default_testcase_catalog()
+                return
 
-            device_payload, testcase_catalog = await asyncio.gather(
-                check_device(),
-                fetch_testcase_catalog(),
-            )
-            return scanner_status, device_payload, testcase_catalog
+            await check_device()
 
-        token_ready, scanner_snapshot = await asyncio.gather(check_sso(), check_scanner())
-        scanner_status, device_payload, testcase_catalog = scanner_snapshot
-
-        notify_started("radar", "RADAR backend")
-        if token_ready:
+        async def check_radar(token_task: asyncio.Task[bool]) -> None:
+            notify_started("radar", "RADAR backend")
             started = time.monotonic()
-            try:
-                heartbeat_payload = build_heartbeat_payload(
-                    settings,
-                    hostname=socket.gethostname(),
-                    version=__version__,
-                    scanner_status=scanner_status,
-                    device_payload=device_payload,
-                    testcase_catalog=testcase_catalog,
+            token_ready = await token_task
+            if not token_ready:
+                completed(
+                    DiagnosticResult(
+                        "radar",
+                        "RADAR backend",
+                        False,
+                        "Skipped because SSO authentication failed",
+                        int((time.monotonic() - started) * 1000),
+                    )
                 )
+                return
+            try:
                 radar = RadarClient(settings, client, token_provider)
-                await radar.heartbeat(heartbeat_payload)
+                await radar.health()
                 completed(
                     DiagnosticResult(
                         "radar",
                         "RADAR backend",
                         True,
-                        "Authenticated heartbeat accepted",
+                        "Authenticated health check passed",
                         int((time.monotonic() - started) * 1000),
                     )
                 )
@@ -238,15 +220,8 @@ async def run_diagnostics(
                         int((time.monotonic() - started) * 1000),
                     )
                 )
-        else:
-            completed(
-                DiagnosticResult(
-                    "radar",
-                    "RADAR backend",
-                    False,
-                    "Skipped because SSO authentication failed",
-                    0,
-                )
-            )
+
+        token_task = asyncio.create_task(check_sso())
+        await asyncio.gather(token_task, check_scanner(), check_radar(token_task))
 
     return sorted(results, key=lambda result: _RESULT_ORDER[result.key])

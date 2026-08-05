@@ -7,10 +7,10 @@ ManifestDPIAware true
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.7.0"
+  !define APP_VERSION "0.7.1"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.7.0.0"
+  !define APP_FILE_VERSION "0.7.1.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"

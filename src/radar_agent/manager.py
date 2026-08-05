@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
     QApplication,
     QCheckBox,
     QFormLayout,
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -92,6 +94,43 @@ class ManagerEvents(QObject):
     diagnostic_completed = Signal(object)
     update_progress = Signal(str, int)
     process_output = Signal(str)
+
+
+class NumericStepper(QFrame):
+    def __init__(self, minimum: int, maximum: int) -> None:
+        super().__init__()
+        self.setObjectName("NumericStepper")
+        self.setFixedWidth(176)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.input = QSpinBox()
+        self.input.setObjectName("StepperInput")
+        self.input.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.input.setRange(minimum, maximum)
+        layout.addWidget(self.input, 1)
+
+        self.decrement_button = QToolButton()
+        self.decrement_button.setObjectName("StepperButton")
+        self.decrement_button.setText("-")
+        self.decrement_button.setToolTip("Decrease")
+        self.decrement_button.clicked.connect(self.input.stepDown)
+        layout.addWidget(self.decrement_button)
+
+        self.increment_button = QToolButton()
+        self.increment_button.setObjectName("StepperButton")
+        self.increment_button.setText("+")
+        self.increment_button.setToolTip("Increase")
+        self.increment_button.clicked.connect(self.input.stepUp)
+        layout.addWidget(self.increment_button)
+
+    def setValue(self, value: int) -> None:
+        self.input.setValue(value)
+
+    def value(self) -> int:
+        return self.input.value()
 
 
 class ManagerWindow(QMainWindow):
@@ -321,10 +360,8 @@ class ManagerWindow(QMainWindow):
         self.check_update_button.clicked.connect(lambda: self.check_for_updates())
         self.install_update_button = QPushButton("Update now")
         self.install_update_button.setObjectName("PrimaryButton")
-        self.install_update_button.setIcon(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown)
-        )
         self.install_update_button.setEnabled(False)
+        self.install_update_button.hide()
         self.install_update_button.clicked.connect(self.install_available_update)
         update_row.addWidget(self.check_update_button)
         update_row.addWidget(self.install_update_button)
@@ -499,11 +536,8 @@ class ManagerWindow(QMainWindow):
         edit.setClearButtonEnabled(True)
         return edit
 
-    def _spinbox(self, minimum: int, maximum: int) -> QSpinBox:
-        spin = QSpinBox()
-        spin.setRange(minimum, maximum)
-        spin.setFixedWidth(150)
-        return spin
+    def _spinbox(self, minimum: int, maximum: int) -> NumericStepper:
+        return NumericStepper(minimum, maximum)
 
     def _build_diagnostics_page(self) -> QWidget:
         page, layout = self._page(
@@ -785,16 +819,19 @@ class ManagerWindow(QMainWindow):
             self._available_update = update
             self.update_status_label.setText(f"Version {update.latest_version} is available")
             self._set_label_tone(self.update_status_label, "warning")
+            self.install_update_button.show()
             self.install_update_button.setEnabled(True)
         else:
             self._available_update = None
             self.update_status_label.setText(f"Up to date ({__version__})")
             self._set_label_tone(self.update_status_label, "success")
             self.install_update_button.setEnabled(False)
+            self.install_update_button.hide()
 
     def _show_update_error(self, error: str, silent: bool) -> None:
         self._update_check_running = False
         self.check_update_button.setEnabled(True)
+        self.install_update_button.setVisible(self._available_update is not None)
         self.install_update_button.setEnabled(self._available_update is not None)
         self.update_status_label.setText("Unable to check for updates")
         self._set_label_tone(self.update_status_label, "error")
@@ -885,6 +922,7 @@ class ManagerWindow(QMainWindow):
         self._update_install_running = False
         self._set_interaction_locked(False)
         self.check_update_button.setEnabled(True)
+        self.install_update_button.show()
         self.install_update_button.setEnabled(True)
         self.update_status_label.setText("Update download failed")
         self._set_label_tone(self.update_status_label, "error")
@@ -1154,16 +1192,21 @@ class ManagerWindow(QMainWindow):
     def _set_log_text(self, content: str) -> None:
         self.log_output.setPlainText(content)
         if self.log_autoscroll.isChecked():
-            self.log_output.moveCursor(QTextCursor.MoveOperation.End)
+            QTimer.singleShot(0, self._scroll_logs_to_bottom_left)
 
     @Slot(str)
     def _append_log_text(self, content: str) -> None:
-        cursor = self.log_output.textCursor()
+        cursor = QTextCursor(self.log_output.document())
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(content)
         if self.log_autoscroll.isChecked():
-            self.log_output.setTextCursor(cursor)
-            self.log_output.ensureCursorVisible()
+            QTimer.singleShot(0, self._scroll_logs_to_bottom_left)
+
+    def _scroll_logs_to_bottom_left(self) -> None:
+        vertical = self.log_output.verticalScrollBar()
+        horizontal = self.log_output.horizontalScrollBar()
+        vertical.setValue(vertical.maximum())
+        horizontal.setValue(horizontal.minimum())
 
     def refresh_logs(self) -> None:
         if self._direct_process is not None and self._direct_process.poll() is None:

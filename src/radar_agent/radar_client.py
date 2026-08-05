@@ -35,6 +35,9 @@ class RadarClient:
     async def heartbeat(self, payload: dict[str, Any]) -> None:
         await self._request("POST", "/internal/scanner/agents/heartbeat", json=payload)
 
+    async def health(self) -> None:
+        await self._request("GET", "/internal/scanner/health")
+
     async def claim_job(self) -> JobClaim | None:
         response = await self._request(
             "POST",

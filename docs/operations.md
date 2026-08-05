@@ -17,13 +17,13 @@ Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics ki�
 1. Client Credentials của VNPAY SSO.
 2. APK Scanner `/health`.
 3. APK Scanner `/device` và quyền của thiết bị Android.
-4. Heartbeat có xác thực tới RADAR.
+4. RADAR `/internal/scanner/health` có xác thực.
 
-Chạy Diagnostics sẽ gửi một heartbeat thật nhưng không nhận hoặc thực thi scan job. Từ phiên bản
-`0.6.0`, bảng kết quả hiển thị trạng thái của từng bước ngay khi chạy xong; không cần chờ cả bốn
-phép kiểm tra hoàn tất mới thấy kết quả. Từ `0.6.1`, SSO và scanner chạy đồng thời; sau khi scanner
-sẵn sàng, kiểm tra thiết bị và catalog testcase cũng chạy đồng thời. Heartbeat RADAR chỉ chạy sau
-khi có token và snapshot scanner vì đây là hai phụ thuộc bắt buộc.
+Chạy Diagnostics không ghi heartbeat và không nhận hoặc thực thi scan job. Từ phiên bản `0.6.0`,
+bảng kết quả hiển thị trạng thái của từng bước ngay khi chạy xong; không cần chờ cả bốn phép kiểm
+tra hoàn tất mới thấy kết quả. Từ `0.7.1`, RADAR health bắt đầu cùng các phép kiểm tra khác, chỉ chờ
+token SSO bắt buộc và không chờ kết quả APK Scanner hoặc Android device. Kiểm tra Android vẫn bị
+bỏ qua khi scanner đang bận để không ảnh hưởng testcase đang chạy.
 
 Scanner Manager chạy một instance trong mỗi phiên đăng nhập Windows. Nút đóng cửa sổ thu nhỏ ứng
 dụng xuống system tray. Menu tray cung cấp các thao tác nhanh: mở Manager, chạy Diagnostics, mở log,
@@ -59,6 +59,7 @@ Agent ghi log có cấu trúc JSON và WinSW thực hiện log rotation. Các th
 | `GET .../health 200` | Có thể kết nối tới APK Scanner cục bộ. |
 | `GET .../device 200` | Device endpoint đã phản hồi; xem heartbeat để biết trạng thái connected/disconnected. |
 | `POST .../token 200` | Keycloak Client Credentials hợp lệ. |
+| `GET .../internal/scanner/health 200` | RADAR chấp nhận token Scanner Agent; phép kiểm tra không ghi dữ liệu. |
 | `POST .../heartbeat 200` | RADAR đã chấp nhận định danh và trạng thái Agent. |
 | `POST .../claim ... 200` | Long poll kết thúc bình thường; phản hồi rỗng nghĩa là không có job trong hàng đợi. |
 | `Claimed scanner job` | Agent đã nhận một job và lease token. |

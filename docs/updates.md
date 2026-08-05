@@ -35,6 +35,9 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.1` chỉ hiển thị **Update now** khi có bản mới, thay spinbox native bằng stepper
+  `- / +`, kiểm tra RADAR qua endpoint health có xác thực mà không chờ Android, và giữ log ở
+  cuối danh sách nhưng luôn căn ngang về đầu dòng.
 - Bản `0.7.0` chuyển toàn bộ Manager và Updater sang PySide6/Qt Widgets với giao diện sáng,
   sidebar cố định và style đồng nhất với RADAR. Các tác vụ mạng, PowerShell và diagnostics vẫn
   chạy nền; từng kết quả diagnostics được cập nhật ngay khi hoàn tất. System tray dùng native Qt,

@@ -123,6 +123,35 @@ QLineEdit, QSpinBox {{
 }}
 QLineEdit:focus, QSpinBox:focus {{ border: 2px solid {BLUE_BRIGHT}; padding: 0 9px; }}
 QLineEdit:disabled, QSpinBox:disabled {{ color: #9AA8B5; background: #F3F5F7; }}
+QFrame#NumericStepper {{
+    min-height: 35px;
+    max-height: 35px;
+    background: {INPUT};
+    border: 1px solid {BORDER};
+    border-radius: 6px;
+}}
+QSpinBox#StepperInput {{
+    min-height: 33px;
+    padding: 0 10px;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}}
+QSpinBox#StepperInput:focus {{ border: 0; padding: 0 10px; }}
+QToolButton#StepperButton {{
+    min-width: 34px;
+    max-width: 34px;
+    min-height: 33px;
+    max-height: 33px;
+    color: {MUTED};
+    background: transparent;
+    border: 0;
+    border-left: 1px solid {BORDER};
+    font-size: 16px;
+    font-weight: 600;
+}}
+QToolButton#StepperButton:hover {{ color: {BLUE}; background: {BLUE_TINT}; }}
+QToolButton#StepperButton:pressed {{ background: #DCECF7; }}
 QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 17px; height: 17px; }}
 QProgressBar {{
