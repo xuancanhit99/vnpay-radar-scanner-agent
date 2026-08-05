@@ -35,6 +35,9 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.9` không gọi các endpoint đọc thiết bị/testcase của APK Scanner khi scanner đang bận.
+  Trạng thái heartbeat dùng snapshot ổn định gần nhất, tránh làm đổi kênh ADB giữa lúc chạy
+  `TC-MOBI-13`.
 - Bản `0.5.8` bổ sung cửa sổ Updater độc lập với Manager. Các bước cài đặt lấy từ trạng thái thật
   do Setup ghi vào Registry; lỗi không làm mất cửa sổ mà hiển thị nguyên nhân, **Open logs** và
   **Retry**. Setup `0.5.8` cũng tự bootstrap Updater khi được Manager cũ gọi bằng chế độ silent,

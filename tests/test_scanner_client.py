@@ -255,3 +255,82 @@ async def test_heartbeat_allows_usb_debug_with_legacy_scanner_over_wifi() -> Non
     assert status["device_type"] == "main_usb"
     assert status["ready"] is True
     assert status["reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_does_not_probe_device_while_scanner_is_busy() -> None:
+    busy = False
+    requested_paths: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"busy": busy})
+        if request.url.path == "/device":
+            return httpx.Response(
+                200,
+                json={
+                    "deviceModel": "Samsung A55",
+                    "usb": {"online": False, "serial": "R5CXA2XMV4Y"},
+                    "wifi": {"online": True, "serial": "192.0.2.10:5555"},
+                },
+            )
+        if request.url.path == "/testcases":
+            return httpx.Response(
+                200,
+                json={
+                    "testcases": [
+                        {
+                            "sectionId": "TC-MOBI-13",
+                            "name": "Check USB Debug",
+                            "device": "R5CXA2XMV4Y",
+                            "timeout_seconds": 360,
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        scanner = ScannerClient(settings, client)
+        await scanner.heartbeat_payload(hostname="WINDOWS-LAB", version="0.5.8")
+        requested_paths.clear()
+        busy = True
+
+        payload = await scanner.heartbeat_payload(hostname="WINDOWS-LAB", version="0.5.8")
+
+    assert requested_paths == ["/health"]
+    assert payload["scanner_status"] == "busy"
+    assert payload["device_status"] == "connected"
+    assert payload["device_serial"] == "192.0.2.10:5555"
+    assert payload["device_model"] == "Samsung A55"
+    assert payload["capabilities"] == ["TC-MOBI-13"]
+    assert payload["capability_statuses"][0]["ready"] is False
+    assert payload["capability_statuses"][0]["reason"] == "APK Scanner đang chạy testcase khác"
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_keeps_scanner_ready_when_testcase_catalog_is_unavailable() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/health":
+            return httpx.Response(200, json={"busy": False})
+        if request.url.path == "/device":
+            return httpx.Response(
+                200,
+                json={"usb": {"online": True, "serial": "device-001"}},
+            )
+        if request.url.path == "/testcases":
+            return httpx.Response(503)
+        return httpx.Response(404)
+
+    settings = AgentSettings(_env_file=None, scanner_url="http://scanner.local")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        payload = await ScannerClient(settings, client).heartbeat_payload(
+            hostname="WINDOWS-LAB",
+            version="0.5.9",
+        )
+
+    assert payload["scanner_status"] == "ready"
+    assert payload["device_status"] == "connected"
+    assert payload["capabilities"] == ["TC-MOBI-3"]

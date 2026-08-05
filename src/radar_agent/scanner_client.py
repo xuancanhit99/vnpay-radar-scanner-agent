@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 import httpx
@@ -101,40 +102,62 @@ class ScannerClient:
     def __init__(self, settings: AgentSettings, client: httpx.AsyncClient):
         self._settings = settings
         self._client = client
+        self._probe_lock = asyncio.Lock()
+        self._scan_in_progress = False
+        self._last_device_payload: dict[str, Any] = {}
+        self._last_testcase_catalog = list(_LEGACY_TESTCASES)
 
     async def heartbeat_payload(self, *, hostname: str, version: str) -> dict[str, Any]:
         scanner_status = "unavailable"
         device_status = "disconnected"
         device_serial = None
         device_model = self._settings.device_model
-        device_payload: dict[str, Any] = {}
-        testcase_catalog = _LEGACY_TESTCASES
+        device_payload = self._last_device_payload
+        testcase_catalog = self._last_testcase_catalog
         try:
             health = await self._client.get(f"{self._settings.scanner_url}/health", timeout=5)
             health.raise_for_status()
-            scanner_status = "busy" if health.json().get("busy") else "ready"
+            scanner_status = (
+                "busy" if health.json().get("busy") or self._scan_in_progress else "ready"
+            )
 
-            device = await self._client.get(f"{self._settings.scanner_url}/device", timeout=20)
-            device.raise_for_status()
-            device_payload = device.json()
-            usb = device_payload.get("usb") or {}
-            wifi = device_payload.get("wifi") or {}
-            selected = usb if usb.get("online") else wifi
-            if selected.get("online"):
-                device_status = "connected"
-                device_serial = selected.get("serial")
-                detected_model = str(device_payload.get("deviceModel") or "").strip()
-                if detected_model:
-                    device_model = detected_model
+            # Some legacy scanner APIs make GET /device recover ADB Wi-Fi as a side effect.
+            # During TC-MOBI-13 that would re-enable adbhide and disconnect the USB channel
+            # while the testcase is still reading the device. Reuse the last stable snapshot
+            # whenever a local scan is running.
+            if scanner_status != "busy":
+                async with self._probe_lock:
+                    if self._scan_in_progress:
+                        scanner_status = "busy"
+                    else:
+                        device = await self._client.get(
+                            f"{self._settings.scanner_url}/device", timeout=20
+                        )
+                        device.raise_for_status()
+                        device_payload = device.json()
+                        self._last_device_payload = device_payload
+
+                        try:
+                            testcases = await self._client.get(
+                                f"{self._settings.scanner_url}/testcases", timeout=5
+                            )
+                            testcases.raise_for_status()
+                            testcase_catalog = _normalize_testcase_catalog(testcases.json())
+                            self._last_testcase_catalog = testcase_catalog
+                        except (httpx.HTTPError, ValueError):
+                            testcase_catalog = self._last_testcase_catalog
         except (httpx.HTTPError, ValueError):
             scanner_status = "unavailable"
 
-        try:
-            testcases = await self._client.get(f"{self._settings.scanner_url}/testcases", timeout=5)
-            testcases.raise_for_status()
-            testcase_catalog = _normalize_testcase_catalog(testcases.json())
-        except (httpx.HTTPError, ValueError):
-            testcase_catalog = _LEGACY_TESTCASES
+        usb = device_payload.get("usb") or {}
+        wifi = device_payload.get("wifi") or {}
+        selected = usb if usb.get("online") else wifi
+        if selected.get("online"):
+            device_status = "connected"
+            device_serial = selected.get("serial")
+            detected_model = str(device_payload.get("deviceModel") or "").strip()
+            if detected_model:
+                device_model = detected_model
 
         capability_statuses = [
             _capability_status(
@@ -159,6 +182,8 @@ class ScannerClient:
         }
 
     async def run_scan(self, job: ScannerJob) -> JobResult:
+        async with self._probe_lock:
+            self._scan_in_progress = True
         try:
             response = await self._client.post(
                 f"{self._settings.scanner_url}/scan",
@@ -181,3 +206,5 @@ class ScannerClient:
                 detail=f"Không gọi được APK Scanner local: {exc}",
                 output={"error_type": type(exc).__name__},
             )
+        finally:
+            self._scan_in_progress = False
