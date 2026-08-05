@@ -3,22 +3,32 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import tempfile
-import tkinter as tk
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from tkinter import messagebox, ttk
+
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QCloseEvent, QDesktopServices
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from radar_agent.desktop_theme import (
-    BACKGROUND,
     BLUE_BRIGHT,
-    BORDER,
     GREEN,
-    INPUT,
     MUTED,
     RED,
-    TEXT,
     apply_window_icon,
     configure_radar_theme,
 )
@@ -78,19 +88,25 @@ def start_installer(installer: Path) -> subprocess.Popen[bytes]:
 
 
 def _configure_logging() -> Path:
-    log_directory = program_data_directory() / "logs"
-    try:
-        log_directory.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        log_directory = Path(tempfile.gettempdir()) / "VNPAY" / "RadarScannerAgent" / "logs"
-        log_directory.mkdir(parents=True, exist_ok=True)
-    log_path = log_directory / "updater.log"
-    handler = RotatingFileHandler(
-        log_path,
-        maxBytes=2 * 1024 * 1024,
-        backupCount=2,
-        encoding="utf-8",
-    )
+    preferred = program_data_directory() / "logs"
+    fallback = Path(tempfile.gettempdir()) / "VNPAY" / "RadarScannerAgent" / "logs"
+    handler: RotatingFileHandler | None = None
+    log_path = preferred / "updater.log"
+    for log_directory in (preferred, fallback):
+        log_path = log_directory / "updater.log"
+        try:
+            log_directory.mkdir(parents=True, exist_ok=True)
+            handler = RotatingFileHandler(
+                log_path,
+                maxBytes=2 * 1024 * 1024,
+                backupCount=2,
+                encoding="utf-8",
+            )
+            break
+        except OSError:
+            continue
+    if handler is None:
+        raise OSError("Unable to open the Scanner Agent updater log")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     LOGGER.setLevel(logging.INFO)
     LOGGER.handlers.clear()
@@ -98,8 +114,8 @@ def _configure_logging() -> Path:
     return log_path
 
 
-class UpdaterWindow(tk.Tk):
-    def __init__(self, installer: Path, target_version: str) -> None:
+class UpdaterWindow(QWidget):
+    def __init__(self, installer: Path, target_version: str, *, auto_start: bool = True) -> None:
         super().__init__()
         self.installer = installer.resolve()
         self.target_version = target_version
@@ -108,155 +124,112 @@ class UpdaterWindow(tk.Tk):
         self.saw_installing_state = False
         self.post_exit_polls = 0
         self.installing = False
-        self.step_markers: list[tk.Canvas] = []
-        self.step_states: list[ttk.Label] = []
+        self.step_markers: list[QLabel] = []
+        self.step_states: list[QLabel] = []
 
-        self.title(f"VNPAY RADAR Scanner Update {target_version}")
-        self.geometry("650x470")
-        self.resizable(False, False)
-        self.protocol("WM_DELETE_WINDOW", self._close_window)
-        self._configure_style()
+        self.setWindowTitle(f"VNPAY RADAR Scanner Update {target_version}")
+        self.setFixedSize(680, 520)
         apply_window_icon(self)
         self._build_ui()
         self._center_window()
-        self.attributes("-topmost", True)
-        self.after(1200, lambda: self.attributes("-topmost", False))
-        self.after(250, self._start_installation)
-
-    def _configure_style(self) -> None:
-        style = configure_radar_theme(self)
-        style.configure("UpdaterRoot.TFrame", background=BACKGROUND)
-        style.configure(
-            "UpdaterTitle.TLabel",
-            background=BACKGROUND,
-            foreground=TEXT,
-            font=("Segoe UI Semibold", 18),
-        )
-        style.configure(
-            "UpdaterSubtitle.TLabel",
-            background=BACKGROUND,
-            foreground=MUTED,
-            font=("Segoe UI", 10),
-        )
-        style.configure(
-            "Step.TLabel",
-            background=BACKGROUND,
-            foreground=TEXT,
-            font=("Segoe UI", 10),
-        )
-        style.configure(
-            "StepState.TLabel",
-            background=BACKGROUND,
-            foreground=MUTED,
-            font=("Segoe UI Semibold", 9),
-            anchor=tk.E,
-        )
-        style.configure(
-            "UpdaterDetail.TLabel",
-            background=BACKGROUND,
-            foreground=MUTED,
-            font=("Segoe UI", 9),
-        )
-        style.configure(
-            "UpdaterSuccess.TLabel",
-            background=BACKGROUND,
-            foreground=GREEN,
-            font=("Segoe UI Semibold", 10),
-        )
-        style.configure(
-            "UpdaterError.TLabel",
-            background=BACKGROUND,
-            foreground=RED,
-            font=("Segoe UI Semibold", 10),
-        )
-        style.configure(
-            "Horizontal.TProgressbar",
-            background=BLUE_BRIGHT,
-            troughcolor=INPUT,
-            bordercolor=BORDER,
-        )
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        self.show()
+        QTimer.singleShot(1200, self._release_topmost)
+        if auto_start:
+            QTimer.singleShot(250, self._start_installation)
 
     def _build_ui(self) -> None:
-        root = ttk.Frame(self, style="UpdaterRoot.TFrame", padding=(28, 24, 28, 22))
-        root.pack(fill=tk.BOTH, expand=True)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(28, 24, 28, 22)
+        root.setSpacing(0)
 
-        ttk.Label(root, text="Updating Scanner Agent", style="UpdaterTitle.TLabel").pack(
-            anchor=tk.W
+        title = QLabel("Updating Scanner Agent")
+        title.setObjectName("PageTitle")
+        subtitle = QLabel(
+            f"Installing version {self.target_version}. Do not turn off this computer."
         )
-        ttk.Label(
-            root,
-            text=f"Installing version {self.target_version}. Do not turn off this computer.",
-            style="UpdaterSubtitle.TLabel",
-        ).pack(anchor=tk.W, pady=(2, 18))
+        subtitle.setObjectName("PageSubtitle")
+        root.addWidget(title)
+        root.addWidget(subtitle)
+        root.addSpacing(20)
 
-        self.progress = ttk.Progressbar(root, mode="determinate", maximum=100, value=0)
-        self.progress.pack(fill=tk.X, pady=(0, 18))
+        self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
+        self.progress.setRange(0, 100)
+        root.addWidget(self.progress)
+        root.addSpacing(20)
 
-        steps = ttk.Frame(root)
-        steps.pack(fill=tk.X)
-        steps.columnconfigure(1, weight=1)
-        for index, title in enumerate(UPDATE_STEPS):
-            marker = tk.Canvas(
-                steps,
-                width=18,
-                height=18,
-                background=BACKGROUND,
-                borderwidth=0,
-                highlightthickness=0,
-            )
-            marker.grid(row=index, column=0, padx=(0, 10), pady=5)
-            marker.create_oval(3, 3, 15, 15, fill=BORDER, outline="")
+        steps_panel = QFrame()
+        steps_panel.setObjectName("Panel")
+        steps = QGridLayout(steps_panel)
+        steps.setContentsMargins(18, 14, 18, 14)
+        steps.setHorizontalSpacing(12)
+        steps.setVerticalSpacing(8)
+        steps.setColumnStretch(1, 1)
+        for index, step_title in enumerate(UPDATE_STEPS):
+            marker = QLabel("●")
+            marker.setStyleSheet(f"color: {MUTED}; font-size: 17px;")
+            marker.setFixedWidth(16)
             self.step_markers.append(marker)
-            ttk.Label(steps, text=title, style="Step.TLabel").grid(
-                row=index,
-                column=1,
-                sticky=tk.W,
-                pady=5,
-            )
-            state = ttk.Label(steps, text="WAITING", width=10, style="StepState.TLabel")
-            state.grid(row=index, column=2, sticky=tk.E, pady=5)
+            label = QLabel(step_title)
+            state = QLabel("WAITING")
+            state.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            state.setFixedWidth(88)
+            state.setStyleSheet(f"color: {MUTED}; font-weight: 600;")
             self.step_states.append(state)
+            steps.addWidget(marker, index, 0)
+            steps.addWidget(label, index, 1)
+            steps.addWidget(state, index, 2)
+        root.addWidget(steps_panel)
+        root.addSpacing(16)
 
-        self.status_text = tk.StringVar(value="Preparing installation...")
-        self.status_label = ttk.Label(
-            root,
-            textvariable=self.status_text,
-            style="UpdaterDetail.TLabel",
-        )
-        self.status_label.pack(anchor=tk.W, pady=(18, 2))
+        self.status_label = QLabel("Preparing installation...")
+        self.status_label.setObjectName("StatusBusy")
+        self.detail_label = QLabel("")
+        self.detail_label.setObjectName("MutedLabel")
+        self.detail_label.setWordWrap(True)
+        root.addWidget(self.status_label)
+        root.addSpacing(3)
+        root.addWidget(self.detail_label)
+        root.addStretch()
 
-        self.detail_text = tk.StringVar(value="")
-        ttk.Label(
-            root,
-            textvariable=self.detail_text,
-            style="UpdaterDetail.TLabel",
-            wraplength=590,
-        ).pack(anchor=tk.W)
-
-        self.actions = ttk.Frame(root, style="UpdaterRoot.TFrame")
-        self.actions.pack(fill=tk.X, side=tk.BOTTOM, pady=(14, 0))
-        self.open_logs_button = ttk.Button(self.actions, text="Open logs", command=self._open_logs)
-        self.retry_button = ttk.Button(self.actions, text="Retry", command=self._retry)
-        self.close_button = ttk.Button(self.actions, text="Close", command=self.destroy)
-        self.open_logs_button.pack(side=tk.LEFT)
-        self.close_button.pack(side=tk.RIGHT)
-        self.retry_button.pack(side=tk.RIGHT, padx=(0, 8))
-        self.actions.pack_forget()
-
+        self.actions = QWidget()
+        actions_layout = QHBoxLayout(self.actions)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        self.open_logs_button = QPushButton("Open logs")
+        self.open_logs_button.clicked.connect(self._open_logs)
+        self.retry_button = QPushButton("Retry")
+        self.retry_button.setObjectName("PrimaryButton")
+        self.retry_button.clicked.connect(self._retry)
+        self.close_button = QPushButton("Close")
+        self.close_button.clicked.connect(self.close)
+        actions_layout.addWidget(self.open_logs_button)
+        actions_layout.addStretch()
+        actions_layout.addWidget(self.retry_button)
+        actions_layout.addWidget(self.close_button)
+        self.actions.hide()
+        root.addWidget(self.actions)
         self._render_progress(ProgressState(completed=1, active=1))
 
     def _center_window(self) -> None:
-        self.update_idletasks()
-        x = max(0, (self.winfo_screenwidth() - self.winfo_width()) // 2)
-        y = max(0, (self.winfo_screenheight() - self.winfo_height()) // 2)
-        self.geometry(f"+{x}+{y}")
+        screen = QApplication.primaryScreen()
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        frame = self.frameGeometry()
+        frame.moveCenter(available.center())
+        self.move(frame.topLeft())
+
+    def _release_topmost(self) -> None:
+        self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, False)
+        self.show()
 
     def _render_progress(self, state: ProgressState) -> None:
         colors = {
             "done": GREEN,
             "active": BLUE_BRIGHT,
             "failed": RED,
-            "waiting": BORDER,
+            "waiting": MUTED,
         }
         for index, (marker, label) in enumerate(
             zip(self.step_markers, self.step_states, strict=True)
@@ -269,18 +242,20 @@ class UpdaterWindow(tk.Tk):
                 key, text = "active", "RUNNING"
             else:
                 key, text = "waiting", "WAITING"
-            marker.itemconfigure(1, fill=colors[key])
-            label.configure(text=text, foreground=colors[key])
-        self.progress["value"] = state.completed * 100 / len(UPDATE_STEPS)
+            marker.setStyleSheet(f"color: {colors[key]}; font-size: 17px;")
+            label.setText(text)
+            label.setStyleSheet(f"color: {colors[key]}; font-weight: 600;")
+        self.progress.setValue(int(state.completed * 100 / len(UPDATE_STEPS)))
 
     def _start_installation(self) -> None:
-        self.actions.pack_forget()
+        self.actions.hide()
         self.installing = True
         self.saw_installing_state = False
         self.post_exit_polls = 0
-        self.status_text.set("Starting installer...")
-        self.status_label.configure(style="UpdaterDetail.TLabel")
-        self.detail_text.set("")
+        self.status_label.setText("Starting installer...")
+        self.status_label.setObjectName("StatusBusy")
+        self._refresh_label_style(self.status_label)
+        self.detail_label.clear()
         self._render_progress(ProgressState(completed=1, active=1))
         try:
             self.process = start_installer(self.installer)
@@ -288,7 +263,7 @@ class UpdaterWindow(tk.Tk):
             self._show_failure(str(exc), ProgressState(completed=1, active=None, failed=1))
             return
         LOGGER.info("Started installer for version %s", self.target_version)
-        self.after(250, self._poll_installer)
+        QTimer.singleShot(250, self._poll_installer)
 
     def _poll_installer(self) -> None:
         if self.process is None:
@@ -297,16 +272,15 @@ class UpdaterWindow(tk.Tk):
         relevant = status is not None and status.version == self.target_version
         if relevant and status.state == "installing":
             self.saw_installing_state = True
-            self._render_progress(progress_state(status, self.target_version))
-            active = progress_state(status, self.target_version).active
-            if active is not None:
-                self.status_text.set(f"Step {active + 1} of {len(UPDATE_STEPS)}")
+            state = progress_state(status, self.target_version)
+            self._render_progress(state)
+            if state.active is not None:
+                self.status_label.setText(f"Step {state.active + 1} of {len(UPDATE_STEPS)}")
 
         exit_code = self.process.poll()
         if exit_code is None:
-            self.after(250, self._poll_installer)
+            QTimer.singleShot(250, self._poll_installer)
             return
-
         if relevant and status.state == "success":
             self._show_success()
             return
@@ -317,51 +291,59 @@ class UpdaterWindow(tk.Tk):
 
         self.post_exit_polls += 1
         if self.post_exit_polls < 20:
-            self.after(250, self._poll_installer)
+            QTimer.singleShot(250, self._poll_installer)
             return
         detail = f"Installer exited with code {exit_code} without a final status."
         LOGGER.error(detail)
-        current = progress_state(status if self.saw_installing_state else None, self.target_version)
+        current = progress_state(
+            status if self.saw_installing_state else None,
+            self.target_version,
+        )
         failed = current.active if current.active is not None else 1
         self._show_failure(detail, ProgressState(current.completed, None, failed))
 
     def _show_success(self) -> None:
         self.installing = False
         self._render_progress(ProgressState(completed=len(UPDATE_STEPS), active=None))
-        self.status_text.set(f"Version {self.target_version} installed successfully")
-        self.status_label.configure(style="UpdaterSuccess.TLabel")
-        self.detail_text.set("Scanner Manager is reopening with the new version.")
+        self.status_label.setText(f"Version {self.target_version} installed successfully")
+        self.status_label.setObjectName("StatusSuccess")
+        self._refresh_label_style(self.status_label)
+        self.detail_label.setText("Scanner Manager is reopening with the new version.")
         LOGGER.info("Installation completed successfully")
-        self.after(2500, self.destroy)
+        QTimer.singleShot(2500, self.close)
 
     def _show_failure(self, detail: str, state: ProgressState) -> None:
         self.installing = False
         self._render_progress(state)
-        self.status_text.set(f"Update to version {self.target_version} failed")
-        self.status_label.configure(style="UpdaterError.TLabel")
-        self.detail_text.set(detail)
-        self.actions.pack(fill=tk.X, side=tk.BOTTOM, pady=(14, 0))
+        self.status_label.setText(f"Update to version {self.target_version} failed")
+        self.status_label.setObjectName("StatusError")
+        self._refresh_label_style(self.status_label)
+        self.detail_label.setText(detail)
+        self.actions.show()
         LOGGER.error("Installation failed: %s", detail)
+
+    def _refresh_label_style(self, label: QLabel) -> None:
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _retry(self) -> None:
         if not self.installing:
             self._start_installation()
 
     def _open_logs(self) -> None:
-        try:
-            os.startfile(str(self.log_path.parent))
-        except OSError as exc:
-            messagebox.showerror("Open logs", str(exc), parent=self)
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.log_path.parent))):
+            QMessageBox.critical(self, "Open logs", "Windows could not open the log folder.")
 
-    def _close_window(self) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
         if self.installing:
-            messagebox.showwarning(
+            QMessageBox.warning(
+                self,
                 "Installation in progress",
                 "The updater cannot be closed while application files are being replaced.",
-                parent=self,
             )
+            event.ignore()
             return
-        self.destroy()
+        event.accept()
 
 
 def _parse_arguments() -> argparse.Namespace:
@@ -376,5 +358,9 @@ def _parse_arguments() -> argparse.Namespace:
 
 def main() -> None:
     arguments = _parse_arguments()
+    application = QApplication(sys.argv)
+    application.setApplicationName("VNPAY RADAR Scanner Updater")
+    configure_radar_theme(application)
     window = UpdaterWindow(arguments.installer, arguments.version)
-    window.mainloop()
+    window.show()
+    raise SystemExit(application.exec())

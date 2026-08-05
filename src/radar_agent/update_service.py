@@ -14,7 +14,7 @@ import httpx
 LATEST_RELEASE_API = (
     "https://api.github.com/repos/xuancanhit99/" "vnpay-radar-scanner-agent/releases/latest"
 )
-MAX_INSTALLER_BYTES = 100 * 1024 * 1024
+MAX_INSTALLER_BYTES = 160 * 1024 * 1024
 _VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 

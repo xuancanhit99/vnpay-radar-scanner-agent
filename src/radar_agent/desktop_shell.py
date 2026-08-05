@@ -1,10 +1,9 @@
 import ctypes
 import os
-import threading
 from collections.abc import Callable
 
-import pystray
 from PIL import Image, ImageDraw
+from PySide6.QtWidgets import QMenu, QSystemTrayIcon, QWidget
 
 _ERROR_ALREADY_EXISTS = 183
 _SW_SHOW = 5
@@ -116,12 +115,13 @@ def focus_existing_manager(title_prefix: str = _WINDOW_TITLE_PREFIX) -> bool:
 
 
 class TrayController:
-    """Own the Windows notification-area icon and marshal actions to Tk."""
+    """Own the native Qt notification-area icon and its quick actions."""
 
     def __init__(
         self,
         *,
-        dispatch: Callable[[Callable[[], None]], None],
+        parent: QWidget,
+        icon,
         open_manager: Callable[[], None],
         run_diagnostics: Callable[[], None],
         open_logs: Callable[[], None],
@@ -132,54 +132,60 @@ class TrayController:
         exit_application: Callable[[], None],
         actions_enabled: Callable[[], bool],
     ) -> None:
-        self._dispatch = dispatch
         self._actions_enabled = actions_enabled
+        self._icon = QSystemTrayIcon(icon, parent)
+        self._icon.setToolTip("VNPAY RADAR Scanner Manager")
+        self._menu = QMenu(parent)
 
-        def action(callback: Callable[[], None]):
-            def invoke(_icon: pystray.Icon, _item: pystray.MenuItem) -> None:
-                self._dispatch(callback)
-
-            return invoke
-
-        def enabled(_item: pystray.MenuItem) -> bool:
-            return self._actions_enabled()
-
-        self._icon = pystray.Icon(
-            "vnpay-radar-scanner-manager",
-            create_radar_icon(),
-            "VNPAY RADAR Scanner Manager",
-            menu=pystray.Menu(
-                pystray.MenuItem("Open Scanner Manager", action(open_manager), default=True),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Run diagnostics", action(run_diagnostics), enabled=enabled),
-                pystray.MenuItem("Open logs", action(open_logs), enabled=enabled),
-                pystray.MenuItem("Check for updates", action(check_updates), enabled=enabled),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Start service", action(start_service), enabled=enabled),
-                pystray.MenuItem("Stop service", action(stop_service), enabled=enabled),
-                pystray.MenuItem("Restart service", action(restart_service), enabled=enabled),
-                pystray.Menu.SEPARATOR,
-                pystray.MenuItem("Exit", action(exit_application), enabled=enabled),
-            ),
+        open_action = self._menu.addAction("Open Scanner Manager")
+        open_action.triggered.connect(open_manager)
+        self._menu.addSeparator()
+        self._guarded_actions = []
+        for label, callback in (
+            ("Run diagnostics", run_diagnostics),
+            ("Open logs", open_logs),
+            ("Check for updates", check_updates),
+        ):
+            action = self._menu.addAction(label)
+            action.triggered.connect(callback)
+            self._guarded_actions.append(action)
+        self._menu.addSeparator()
+        for label, callback in (
+            ("Start service", start_service),
+            ("Stop service", stop_service),
+            ("Restart service", restart_service),
+        ):
+            action = self._menu.addAction(label)
+            action.triggered.connect(callback)
+            self._guarded_actions.append(action)
+        self._menu.addSeparator()
+        exit_action = self._menu.addAction("Exit")
+        exit_action.triggered.connect(exit_application)
+        self._guarded_actions.append(exit_action)
+        self._menu.aboutToShow.connect(self._refresh_actions)
+        self._icon.setContextMenu(self._menu)
+        self._icon.activated.connect(
+            lambda reason: open_manager()
+            if reason == QSystemTrayIcon.ActivationReason.DoubleClick
+            else None
         )
-        self._thread: threading.Thread | None = None
+
+    def _refresh_actions(self) -> None:
+        enabled = self._actions_enabled()
+        for action in self._guarded_actions:
+            action.setEnabled(enabled)
 
     def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(
-            target=self._icon.run,
-            name="scanner-manager-tray",
-            daemon=True,
-        )
-        self._thread.start()
+        self._icon.show()
 
     def stop(self) -> None:
-        self._icon.stop()
+        self._icon.hide()
 
     def notify_minimized(self) -> None:
-        if self._icon.HAS_NOTIFICATION:
-            self._icon.notify(
-                "Scanner Manager is still running. Use this icon to reopen or exit.",
+        if QSystemTrayIcon.supportsMessages():
+            self._icon.showMessage(
                 "VNPAY RADAR Scanner Manager",
+                "Scanner Manager is still running. Use this icon to reopen or exit.",
+                QSystemTrayIcon.MessageIcon.Information,
+                5000,
             )

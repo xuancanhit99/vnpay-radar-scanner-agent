@@ -8,6 +8,7 @@ import pytest
 from radar_agent import update_service
 from radar_agent.manager import ManagerWindow
 from radar_agent.update_service import (
+    MAX_INSTALLER_BYTES,
     InstallerStatus,
     UpdateError,
     check_for_update,
@@ -18,20 +19,13 @@ from radar_agent.update_service import (
 )
 
 
-class _StringValue:
-    def __init__(self) -> None:
-        self.value = ""
-
-    def set(self, value: str) -> None:
-        self.value = value
-
-
 class _StatusLabel:
     def __init__(self) -> None:
-        self.style = ""
+        self.text = ""
+        self.tone = ""
 
-    def configure(self, *, style: str) -> None:
-        self.style = style
+    def setText(self, value: str) -> None:
+        self.text = value
 
 
 def _release_payload(version: str, installer: bytes) -> dict:
@@ -124,6 +118,29 @@ def test_download_installer_removes_partial_file_on_checksum_mismatch(tmp_path) 
     destination = tmp_path / update.installer_name
     assert not destination.exists()
     assert not destination.with_suffix(".exe.partial").exists()
+
+
+def test_download_installer_rejects_asset_above_release_limit(tmp_path) -> None:
+    installer = b"installer"
+    payload = _release_payload("0.4.0", installer)
+    with _client_for_release(payload, installer) as release_client:
+        update = check_for_update("0.3.2", client=release_client)
+
+    def oversized_response(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Content-Length": str(MAX_INSTALLER_BYTES + 1)},
+            request=request,
+        )
+
+    with httpx.Client(
+        transport=httpx.MockTransport(oversized_response),
+        follow_redirects=True,
+    ) as client:
+        with pytest.raises(UpdateError, match="maximum allowed size"):
+            download_installer(update, tmp_path, client=client)
+
+    assert not (tmp_path / update.installer_name).exists()
 
 
 def test_launch_installer_requests_windows_elevation(tmp_path, monkeypatch) -> None:
@@ -280,7 +297,10 @@ def test_manager_shows_failed_installer_status() -> None:
     window = type(
         "Window",
         (),
-        {"update_status": _StringValue(), "update_status_label": _StatusLabel()},
+        {
+            "update_status_label": _StatusLabel(),
+            "_set_label_tone": lambda self, label, tone: setattr(label, "tone", tone),
+        },
     )()
 
     ManagerWindow._show_installer_status(
@@ -292,7 +312,7 @@ def test_manager_shows_failed_installer_status() -> None:
         ),
     )
 
-    assert window.update_status.value == (
+    assert window.update_status_label.text == (
         "Update to version 0.5.6 failed: Service could not be restarted."
     )
-    assert window.update_status_label.style == "Error.TLabel"
+    assert window.update_status_label.tone == "error"

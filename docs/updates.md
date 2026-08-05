@@ -10,7 +10,7 @@ Khi xác nhận cập nhật, Manager thực hiện:
 
 1. Đọc release mới nhất và tìm đúng file Setup cùng file `SHA256SUMS`.
 2. Chỉ chấp nhận URL HTTPS thuộc GitHub hoặc `githubusercontent.com`.
-3. Tải Setup vào `C:\ProgramData\VNPAY\RadarScannerAgent\updates` với giới hạn 100 MiB.
+3. Tải Setup vào `C:\ProgramData\VNPAY\RadarScannerAgent\updates` với giới hạn 160 MiB.
 4. Tính SHA-256 và so sánh với checksum của release.
 5. Dừng direct process nếu đang chạy và bàn giao package cho `radar-scanner-updater.exe` chạy
    độc lập trong thư mục `updates`.
@@ -35,6 +35,10 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.0` chuyển toàn bộ Manager và Updater sang PySide6/Qt Widgets với giao diện sáng,
+  sidebar cố định và style đồng nhất với RADAR. Các tác vụ mạng, PowerShell và diagnostics vẫn
+  chạy nền; từng kết quả diagnostics được cập nhật ngay khi hoàn tất. System tray dùng native Qt,
+  cửa sổ update tiếp tục khóa thao tác cho tới khi bàn giao thành công cho Setup.
 - Bản `0.6.1` chuyển Manager và Updater về giao diện sáng, giữ màu xanh VNPAY làm điểm nhấn.
   Diagnostics chạy đồng thời các probe độc lập và tái sử dụng cùng snapshot cho heartbeat, giảm
   request lặp. RADAR heartbeat vẫn chờ token và dữ liệu scanner bắt buộc; khi scanner đang bận,

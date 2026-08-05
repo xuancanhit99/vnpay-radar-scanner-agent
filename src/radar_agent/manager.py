@@ -1,32 +1,53 @@
 import asyncio
 import os
-import queue
 import subprocess
+import sys
 import tempfile
 import threading
-import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
-from tkinter import messagebox, ttk
 
 from pydantic import ValidationError
+from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDesktopServices, QTextCursor
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QStackedWidget,
+    QStyle,
+    QSystemTrayIcon,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from radar_agent import __version__
-from radar_agent.config_store import (
-    load_settings,
-    plaintext_bootstrap,
-    save_settings,
-)
+from radar_agent.config_store import load_settings, plaintext_bootstrap, save_settings
 from radar_agent.desktop_shell import SingleInstance, TrayController, focus_existing_manager
 from radar_agent.desktop_theme import (
-    BACKGROUND,
     BLUE_BRIGHT,
     GREEN,
-    INPUT,
     MUTED,
     RED,
-    TEXT,
     apply_window_icon,
     configure_radar_theme,
+    radar_icon,
 )
 from radar_agent.diagnostics import DiagnosticResult, run_diagnostics
 from radar_agent.runtime_paths import (
@@ -64,372 +85,502 @@ _DIAGNOSTIC_STEPS = (
 )
 
 
-class ManagerWindow(tk.Tk):
-    def __init__(self) -> None:
+class ManagerEvents(QObject):
+    task_completed = Signal(str, object)
+    task_failed = Signal(str, str)
+    diagnostic_started = Signal(str, str)
+    diagnostic_completed = Signal(object)
+    update_progress = Signal(str, int)
+    process_output = Signal(str)
+
+
+class ManagerWindow(QMainWindow):
+    def __init__(self, *, start_background_tasks: bool = True) -> None:
         super().__init__()
-        self.title(f"VNPAY RADAR Scanner Manager {__version__}")
-        self.geometry("1080x760")
-        self.minsize(920, 640)
+        self.setWindowTitle(f"VNPAY RADAR Scanner Manager {__version__}")
+        self.resize(1120, 760)
+        self.setMinimumSize(960, 660)
+        apply_window_icon(self)
 
         self._package_root = package_root()
         self._config_path = default_config_path(self._package_root)
         self._configuration_error = ""
         self._settings = self._load_settings_safely()
         self._direct_process: subprocess.Popen[str] | None = None
-        self._process_output: queue.Queue[str] = queue.Queue()
         self._operation_running = False
         self._update_check_running = False
         self._update_install_running = False
         self._available_update: UpdateInfo | None = None
-        self._status_refresh_running = False
         self._diagnostics_running = False
         self._diagnostic_results: dict[str, DiagnosticResult] = {}
-        self._diagnostic_items: dict[str, str] = {}
+        self._diagnostic_rows: dict[str, int] = {}
         self._interaction_locked = False
-        self._locked_widget_states: dict[ttk.Widget, bool] = {}
-        self._logs_built = False
         self._tray: TrayController | None = None
         self._tray_notice_shown = False
+        self._exiting = False
+        self._tasks: dict[
+            str,
+            tuple[Callable[[object], None], Callable[[str], None]],
+        ] = {}
 
-        self._configure_style()
-        apply_window_icon(self)
+        self.events = ManagerEvents(self)
+        self.events.task_completed.connect(self._task_completed)
+        self.events.task_failed.connect(self._task_failed)
+        self.events.diagnostic_started.connect(self._diagnostic_started)
+        self.events.diagnostic_completed.connect(self._diagnostic_completed)
+        self.events.update_progress.connect(self._show_update_progress)
+        self.events.process_output.connect(self._append_log_text)
+
         self._build_ui()
         self._load_form()
-        self.refresh_status()
-        installer_status = read_installer_status()
-        self._show_installer_status(installer_status)
-        self.protocol("WM_DELETE_WINDOW", self._close_window)
-        self.after(500, self._drain_process_output)
-        if installer_status is None or installer_status.state == "success":
-            delay = 5000 if installer_status else 1200
-            self.after(delay, lambda: self.check_for_updates(silent=True))
-        self.after(200, self._start_tray)
-        self.after(4000, self._status_tick)
+        self._show_installer_status(read_installer_status())
+        self._status_timer = QTimer(self)
+        self._status_timer.setInterval(4000)
+        self._status_timer.timeout.connect(self.refresh_status)
 
-    def _configure_style(self) -> None:
-        style = configure_radar_theme(self)
-        style.configure(
-            "Version.TLabel",
-            background=INPUT,
-            foreground=BLUE_BRIGHT,
-            padding=(10, 5),
-            font=("Segoe UI Semibold", 9),
-        )
-        style.configure("Page.TFrame", background=BACKGROUND)
+        if start_background_tasks:
+            self.refresh_status()
+            self._status_timer.start()
+            QTimer.singleShot(100, self._start_tray)
+            installer_status = read_installer_status()
+            if installer_status is None or installer_status.state == "success":
+                delay = 5000 if installer_status else 1200
+                QTimer.singleShot(delay, lambda: self.check_for_updates(silent=True))
+        else:
+            self._apply_status(ServiceState(False, "not-installed"))
 
     def _build_ui(self) -> None:
-        root = ttk.Frame(self, style="Root.TFrame", padding=(20, 16, 20, 20))
-        root.pack(fill=tk.BOTH, expand=True)
+        central = QWidget(self)
+        shell = QHBoxLayout(central)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+        self.setCentralWidget(central)
 
-        header = ttk.Frame(root, style="Root.TFrame")
-        header.pack(fill=tk.X)
-        heading = ttk.Frame(header, style="Root.TFrame")
-        heading.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Label(heading, text="VNPAY RADAR Scanner Manager", style="Title.TLabel").pack(
-            anchor=tk.W
-        )
-        ttk.Label(
-            heading,
-            text="WINDOWS EDGE SCANNER CONTROL",
-            style="Subtitle.TLabel",
-        ).pack(anchor=tk.W)
-        ttk.Label(header, text=f"VERSION {__version__}", style="Version.TLabel").pack(
-            side=tk.RIGHT, anchor=tk.N, pady=(3, 0)
-        )
-        self.busy_status = tk.StringVar()
-        ttk.Label(
-            root,
-            textvariable=self.busy_status,
-            style="Busy.TLabel",
-        ).pack(anchor=tk.W, pady=(5, 8))
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("Sidebar")
+        self.sidebar.setFixedWidth(224)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(16, 20, 16, 16)
+        sidebar_layout.setSpacing(6)
 
-        self.tabs = ttk.Notebook(root)
-        self.tabs.pack(fill=tk.BOTH, expand=True)
-        self.overview_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
-        self.configuration_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
-        self.diagnostics_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
-        self.logs_tab = ttk.Frame(self.tabs, style="Page.TFrame", padding=18)
-        self.tabs.add(self.overview_tab, text="Overview")
-        self.tabs.add(self.configuration_tab, text="Configuration")
-        self.tabs.add(self.diagnostics_tab, text="Diagnostics")
-        self.tabs.add(self.logs_tab, text="Logs")
+        brand = QHBoxLayout()
+        brand.setSpacing(10)
+        logo = QLabel()
+        logo.setPixmap(radar_icon(40).pixmap(40, 40))
+        logo.setFixedSize(40, 40)
+        brand.addWidget(logo)
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(0)
+        title = QLabel("RADAR Scanner")
+        title.setObjectName("BrandTitle")
+        subtitle = QLabel("Windows Manager")
+        subtitle.setObjectName("BrandSubtitle")
+        brand_text.addWidget(title)
+        brand_text.addWidget(subtitle)
+        brand.addLayout(brand_text)
+        sidebar_layout.addLayout(brand)
+        sidebar_layout.addSpacing(24)
 
-        self._build_overview_tab()
-        self._build_configuration_tab()
-        self._build_diagnostics_tab()
-        self.tabs.bind("<<NotebookTabChanged>>", self._tab_changed)
+        self.nav_buttons: list[QPushButton] = []
+        nav_items = (
+            ("Overview", QStyle.StandardPixmap.SP_ComputerIcon),
+            ("Configuration", QStyle.StandardPixmap.SP_FileDialogDetailedView),
+            ("Diagnostics", QStyle.StandardPixmap.SP_DialogApplyButton),
+            ("Logs", QStyle.StandardPixmap.SP_FileIcon),
+        )
+        for index, (label, icon_type) in enumerate(nav_items):
+            button = QPushButton(label)
+            button.setObjectName("NavButton")
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            button.setIcon(self.style().standardIcon(icon_type))
+            button.setToolTip(f"Open {label}")
+            button.clicked.connect(lambda _checked=False, page=index: self._select_page(page))
+            sidebar_layout.addWidget(button)
+            self.nav_buttons.append(button)
+        self.nav_buttons[0].setChecked(True)
+        sidebar_layout.addStretch()
+        version = QLabel(f"VERSION {__version__}")
+        version.setObjectName("VersionLabel")
+        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sidebar_layout.addWidget(version)
+        shell.addWidget(self.sidebar)
 
-    def _build_overview_tab(self) -> None:
-        page = self.overview_tab
-        page.columnconfigure(0, weight=1)
-        status = ttk.LabelFrame(page, text="Runtime status", style="Section.TLabelframe")
-        status.grid(row=0, column=0, sticky="nsew")
-        status.columnconfigure(1, weight=1)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(24, 18, 24, 24)
+        content_layout.setSpacing(14)
 
-        self.service_status = tk.StringVar(value="Checking...")
-        self.direct_status = tk.StringVar(value="Checking...")
-        self.agent_status = tk.StringVar()
-        self.version_status = tk.StringVar(value=__version__)
-        self.config_status = tk.StringVar()
-        self.package_status = tk.StringVar()
-        rows = (
-            ("Windows Service", self.service_status),
-            ("Direct process", self.direct_status),
-            ("Agent ID", self.agent_status),
-            ("Version", self.version_status),
-            ("Configuration", self.config_status),
-            ("Package", self.package_status),
-        )
-        for row, (label, variable) in enumerate(rows):
-            ttk.Label(status, text=label, style="Field.TLabel").grid(
-                row=row, column=0, sticky=tk.W, padx=(0, 24), pady=6
-            )
-            ttk.Label(status, textvariable=variable, style="Status.TLabel").grid(
-                row=row, column=1, sticky=tk.W, pady=6
-            )
+        self.busy_banner = QFrame()
+        self.busy_banner.setObjectName("InfoBanner")
+        busy_layout = QVBoxLayout(self.busy_banner)
+        busy_layout.setContentsMargins(14, 10, 14, 10)
+        busy_layout.setSpacing(6)
+        self.busy_status = QLabel()
+        self.busy_status.setObjectName("StatusBusy")
+        self.busy_progress = QProgressBar()
+        self.busy_progress.setTextVisible(False)
+        self.busy_progress.setRange(0, 0)
+        busy_layout.addWidget(self.busy_status)
+        busy_layout.addWidget(self.busy_progress)
+        self.busy_banner.hide()
+        content_layout.addWidget(self.busy_banner)
 
-        update = ttk.LabelFrame(page, text="Software update", style="Section.TLabelframe")
-        update.grid(row=1, column=0, sticky="ew", pady=(16, 0))
-        update.columnconfigure(0, weight=1)
-        self.update_status = tk.StringVar(value="Checking for updates...")
-        self.update_status_label = ttk.Label(
-            update,
-            textvariable=self.update_status,
-            style="Status.TLabel",
-            justify=tk.LEFT,
-            wraplength=620,
-        )
-        self.update_status_label.grid(row=0, column=0, sticky=tk.W, padx=(0, 16))
-        self.check_update_button = ttk.Button(
-            update,
-            text="Check again",
-            command=self.check_for_updates,
-        )
-        self.check_update_button.grid(row=0, column=1, padx=(0, 9))
-        self.install_update_button = ttk.Button(
-            update,
-            text="Update now",
-            command=self.install_available_update,
-            state=tk.DISABLED,
-            style="Primary.TButton",
-        )
-        self.install_update_button.grid(row=0, column=2)
-
-        service = ttk.LabelFrame(page, text="Windows Service", style="Section.TLabelframe")
-        service.grid(row=2, column=0, sticky="ew", pady=(16, 0))
-        self.install_button = ttk.Button(
-            service,
-            text="Install / Reinstall",
-            command=self.install_or_upgrade_service,
-            style="Primary.TButton",
-        )
-        self.start_button = ttk.Button(
-            service, text="Start", command=lambda: self.run_service_action("start")
-        )
-        self.stop_button = ttk.Button(
-            service,
-            text="Stop",
-            command=lambda: self.run_service_action("stop"),
-            style="Danger.TButton",
-        )
-        self.restart_button = ttk.Button(
-            service, text="Restart", command=lambda: self.run_service_action("restart")
-        )
-        for column, button in enumerate(
-            (self.install_button, self.start_button, self.stop_button, self.restart_button)
+        self.page_stack = QStackedWidget()
+        self.overview_page = self._build_overview_page()
+        self.configuration_page = self._build_configuration_page()
+        self.diagnostics_page = self._build_diagnostics_page()
+        self.logs_page = self._build_logs_page()
+        for page in (
+            self.overview_page,
+            self.configuration_page,
+            self.diagnostics_page,
+            self.logs_page,
         ):
-            button.grid(row=0, column=column, padx=(0, 9))
+            self.page_stack.addWidget(page)
+        content_layout.addWidget(self.page_stack, 1)
+        shell.addWidget(content, 1)
 
-        direct = ttk.LabelFrame(page, text="Direct run", style="Section.TLabelframe")
-        direct.grid(row=3, column=0, sticky="ew", pady=(16, 0))
-        self.direct_start_button = ttk.Button(
-            direct, text="Run directly", command=self.start_direct
-        )
-        self.direct_stop_button = ttk.Button(
-            direct, text="Stop direct process", command=self.stop_direct
-        )
-        refresh_button = ttk.Button(direct, text="Refresh", command=self.refresh_status)
-        self.direct_start_button.grid(row=0, column=0, padx=(0, 9))
-        self.direct_stop_button.grid(row=0, column=1, padx=(0, 9))
-        refresh_button.grid(row=0, column=2)
+    def _page(self, title: str, subtitle: str) -> tuple[QWidget, QVBoxLayout]:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(14)
+        heading = QLabel(title)
+        heading.setObjectName("PageTitle")
+        description = QLabel(subtitle)
+        description.setObjectName("PageSubtitle")
+        description.setWordWrap(True)
+        layout.addWidget(heading)
+        layout.addWidget(description)
+        layout.addSpacing(2)
+        return page, layout
 
-        note = (
-            "Use the Windows Service for normal operation. Direct run is intended for "
-            "setup and diagnostics and is disabled while the service is running."
-        )
-        ttk.Label(page, text=note, style="Subtitle.TLabel", wraplength=820).grid(
-            row=4, column=0, sticky=tk.W, pady=(16, 0)
-        )
+    def _panel(
+        self,
+        title: str,
+        subtitle: str = "",
+    ) -> tuple[QFrame, QVBoxLayout]:
+        panel = QFrame()
+        panel.setObjectName("Panel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+        heading = QLabel(title)
+        heading.setObjectName("SectionTitle")
+        layout.addWidget(heading)
+        if subtitle:
+            description = QLabel(subtitle)
+            description.setObjectName("SectionSubtitle")
+            description.setWordWrap(True)
+            layout.addWidget(description)
+        return panel, layout
 
-    def _build_configuration_tab(self) -> None:
-        page = self.configuration_tab
-        page.columnconfigure(0, weight=1)
-        form = ttk.LabelFrame(page, text="Agent configuration", style="Section.TLabelframe")
-        form.grid(row=0, column=0, sticky="nsew")
-        form.columnconfigure(1, weight=1)
-        self.base_url = tk.StringVar()
-        self.agent_id = tk.StringVar()
-        self.display_name = tk.StringVar()
-        self.scanner_url = tk.StringVar()
-        self.token_url = tk.StringVar()
-        self.client_id = tk.StringVar()
-        self.client_secret = tk.StringVar()
-        self.device_model = tk.StringVar()
-        self.verify_tls = tk.BooleanVar(value=True)
-        self.heartbeat_interval = tk.IntVar(value=10)
-        self.poll_wait = tk.IntVar(value=20)
-        self.lease_interval = tk.IntVar(value=15)
-        self.scanner_timeout = tk.IntVar(value=400)
-        self.retry_delay = tk.IntVar(value=5)
-
-        fields: tuple[tuple[str, tk.Variable, str], ...] = (
-            ("RADAR URL", self.base_url, "entry"),
-            ("Agent ID", self.agent_id, "entry"),
-            ("Display name", self.display_name, "entry"),
-            ("APK Scanner URL", self.scanner_url, "entry"),
-            ("SSO token URL", self.token_url, "entry"),
-            ("Client ID", self.client_id, "entry"),
-            ("Client secret", self.client_secret, "secret"),
-            ("Device model fallback", self.device_model, "entry"),
-            ("Heartbeat interval (seconds)", self.heartbeat_interval, "spin:5:30"),
-            ("Claim wait (seconds)", self.poll_wait, "spin:0:25"),
-            ("Lease renewal (seconds)", self.lease_interval, "spin:5:30"),
-            ("Scanner timeout (seconds)", self.scanner_timeout, "spin:30:900"),
-            ("Retry delay (seconds)", self.retry_delay, "spin:1:60"),
+    def _build_overview_page(self) -> QWidget:
+        page, layout = self._page(
+            "Overview",
+            "Monitor the Scanner Agent and manage its local Windows runtime.",
         )
-        for row, (label, variable, kind) in enumerate(fields):
-            ttk.Label(form, text=label, style="Field.TLabel").grid(
-                row=row, column=0, sticky=tk.W, padx=(0, 22), pady=6
-            )
-            if kind.startswith("spin:"):
-                _, minimum, maximum = kind.split(":")
-                widget = ttk.Spinbox(
-                    form,
-                    textvariable=variable,
-                    from_=int(minimum),
-                    to=int(maximum),
-                    width=12,
-                )
-                widget.grid(row=row, column=1, sticky=tk.W, pady=6)
-            else:
-                widget = ttk.Entry(
-                    form,
-                    textvariable=variable,
-                    show="*" if kind == "secret" else "",
-                )
-                widget.grid(row=row, column=1, sticky="ew", pady=6)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 6, 0)
+        body_layout.setSpacing(14)
 
-        tls_row = len(fields)
-        ttk.Label(form, text="TLS", style="Field.TLabel").grid(
-            row=tls_row, column=0, sticky=tk.W, padx=(0, 22), pady=6
+        runtime, runtime_layout = self._panel("Runtime status")
+        status_grid = QGridLayout()
+        status_grid.setHorizontalSpacing(12)
+        status_grid.setVerticalSpacing(10)
+        status_grid.setColumnStretch(2, 1)
+        self.service_dot, self.service_status = self._status_row(
+            status_grid, 0, "Windows Service", "Checking..."
         )
-        ttk.Checkbutton(
-            form,
-            text="Verify TLS certificates",
-            variable=self.verify_tls,
-            style="Card.TCheckbutton",
-        ).grid(row=tls_row, column=1, sticky=tk.W, pady=6)
+        self.direct_dot, self.direct_status = self._status_row(
+            status_grid, 1, "Direct process", "Checking..."
+        )
+        self.agent_status = self._metadata_row(status_grid, 2, "Agent ID")
+        self.version_status = self._metadata_row(status_grid, 3, "Version", __version__)
+        self.config_status = self._metadata_row(status_grid, 4, "Configuration")
+        self.package_status = self._metadata_row(status_grid, 5, "Package")
+        runtime_layout.addLayout(status_grid)
+        body_layout.addWidget(runtime)
 
-        buttons = ttk.Frame(form, style="Card.TFrame")
-        buttons.grid(row=tls_row + 1, column=1, sticky=tk.W, pady=(16, 0))
-        ttk.Button(
-            buttons,
-            text="Save configuration",
-            command=self.save_configuration,
-            style="Primary.TButton",
-        ).pack(side=tk.LEFT, padx=(0, 9))
-        ttk.Button(buttons, text="Reload", command=self.reload_configuration).pack(side=tk.LEFT)
-        ttk.Label(
-            form,
-            text="Leave Client secret blank to keep the existing DPAPI-protected value.",
-            style="CardSubtitle.TLabel",
-        ).grid(row=tls_row + 2, column=1, sticky=tk.W, pady=(10, 0))
+        update, update_layout = self._panel(
+            "Software update",
+            "Updates are verified against the SHA-256 checksum published on GitHub Releases.",
+        )
+        update_row = QHBoxLayout()
+        self.update_status_label = QLabel("Checking for updates...")
+        self.update_status_label.setWordWrap(True)
+        update_row.addWidget(self.update_status_label, 1)
+        self.check_update_button = QPushButton("Check again")
+        self.check_update_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload)
+        )
+        self.check_update_button.clicked.connect(lambda: self.check_for_updates())
+        self.install_update_button = QPushButton("Update now")
+        self.install_update_button.setObjectName("PrimaryButton")
+        self.install_update_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowDown)
+        )
+        self.install_update_button.setEnabled(False)
+        self.install_update_button.clicked.connect(self.install_available_update)
+        update_row.addWidget(self.check_update_button)
+        update_row.addWidget(self.install_update_button)
+        update_layout.addLayout(update_row)
+        body_layout.addWidget(update)
 
-    def _build_diagnostics_tab(self) -> None:
-        page = self.diagnostics_tab
-        page.columnconfigure(0, weight=1)
-        page.rowconfigure(1, weight=1)
-        toolbar = ttk.Frame(page, style="Card.TFrame", padding=(12, 8))
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        self.diagnostic_button = ttk.Button(
-            toolbar,
-            text="Run checks",
-            command=self.run_checks,
-            style="Primary.TButton",
+        service, service_layout = self._panel(
+            "Windows Service",
+            "Use the service for normal operation. It starts automatically with Windows.",
         )
-        self.diagnostic_button.pack(side=tk.LEFT)
-        self.diagnostic_summary = tk.StringVar(value="Not run")
-        self.diagnostic_summary_label = ttk.Label(
-            toolbar, textvariable=self.diagnostic_summary, style="Status.TLabel"
-        )
-        self.diagnostic_summary_label.pack(side=tk.LEFT, padx=14)
+        service_buttons = QHBoxLayout()
+        self.install_button = QPushButton(text="Install / Reinstall")
+        self.install_button.setObjectName("PrimaryButton")
+        self.install_button.clicked.connect(self.install_or_upgrade_service)
+        self.start_button = QPushButton("Start")
+        self.start_button.clicked.connect(lambda: self.run_service_action("start"))
+        self.stop_button = QPushButton("Stop")
+        self.stop_button.setObjectName("DangerButton")
+        self.stop_button.clicked.connect(lambda: self.run_service_action("stop"))
+        self.restart_button = QPushButton("Restart")
+        self.restart_button.clicked.connect(lambda: self.run_service_action("restart"))
+        for button in (
+            self.install_button,
+            self.start_button,
+            self.stop_button,
+            self.restart_button,
+        ):
+            service_buttons.addWidget(button)
+        service_buttons.addStretch()
+        service_layout.addLayout(service_buttons)
+        body_layout.addWidget(service)
 
-        columns = ("component", "result", "detail", "latency")
-        self.diagnostic_table = ttk.Treeview(page, columns=columns, show="headings")
-        headings = {
-            "component": "Component",
-            "result": "Result",
-            "detail": "Detail",
-            "latency": "Latency",
-        }
-        for column, heading in headings.items():
-            self.diagnostic_table.heading(column, text=heading)
-        self.diagnostic_table.column("component", width=150, stretch=False)
-        self.diagnostic_table.column("result", width=90, stretch=False)
-        self.diagnostic_table.column("detail", width=520, stretch=True)
-        self.diagnostic_table.column("latency", width=90, stretch=False, anchor=tk.E)
-        self.diagnostic_table.tag_configure("waiting", foreground=MUTED)
-        self.diagnostic_table.tag_configure("running", foreground=BLUE_BRIGHT)
-        self.diagnostic_table.tag_configure("passed", foreground=GREEN)
-        self.diagnostic_table.tag_configure("failed", foreground=RED)
-        scrollbar = ttk.Scrollbar(page, orient=tk.VERTICAL, command=self.diagnostic_table.yview)
-        self.diagnostic_table.configure(yscrollcommand=scrollbar.set)
-        self.diagnostic_table.grid(row=1, column=0, sticky="nsew")
-        scrollbar.grid(row=1, column=1, sticky="ns")
+        direct, direct_layout = self._panel(
+            "Direct run",
+            "Run the worker interactively only for setup and troubleshooting.",
+        )
+        direct_buttons = QHBoxLayout()
+        self.direct_start_button = QPushButton("Run directly")
+        self.direct_start_button.clicked.connect(self.start_direct)
+        self.direct_stop_button = QPushButton("Stop direct process")
+        self.direct_stop_button.clicked.connect(self.stop_direct)
+        refresh_button = QPushButton("Refresh")
+        refresh_button.clicked.connect(self.refresh_status)
+        direct_buttons.addWidget(self.direct_start_button)
+        direct_buttons.addWidget(self.direct_stop_button)
+        direct_buttons.addWidget(refresh_button)
+        direct_buttons.addStretch()
+        direct_layout.addLayout(direct_buttons)
+        body_layout.addWidget(direct)
+        body_layout.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        return page
 
-    def _build_logs_tab(self) -> None:
-        if self._logs_built:
-            return
-        self._logs_built = True
-        page = self.logs_tab
-        page.columnconfigure(0, weight=1)
-        page.rowconfigure(1, weight=1)
-        toolbar = ttk.Frame(page, style="Card.TFrame", padding=(12, 8))
-        toolbar.grid(row=0, column=0, sticky="ew", pady=(0, 12))
-        ttk.Button(toolbar, text="Refresh", command=self.refresh_logs).pack(
-            side=tk.LEFT, padx=(0, 9)
-        )
-        ttk.Button(toolbar, text="Open log folder", command=self.open_log_folder).pack(
-            side=tk.LEFT
-        )
-        log_frame = ttk.Frame(page)
-        log_frame.grid(row=1, column=0, sticky="nsew")
-        log_frame.columnconfigure(0, weight=1)
-        log_frame.rowconfigure(0, weight=1)
-        self.log_output = tk.Text(
-            log_frame,
-            wrap=tk.NONE,
-            state=tk.DISABLED,
-            font=("Consolas", 9),
-            background=INPUT,
-            foreground=TEXT,
-            insertbackground=TEXT,
-            borderwidth=0,
-            padx=10,
-            pady=10,
-        )
-        vertical = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_output.yview)
-        horizontal = ttk.Scrollbar(log_frame, orient=tk.HORIZONTAL, command=self.log_output.xview)
-        self.log_output.configure(yscrollcommand=vertical.set, xscrollcommand=horizontal.set)
-        self.log_output.grid(row=0, column=0, sticky="nsew")
-        vertical.grid(row=0, column=1, sticky="ns")
-        horizontal.grid(row=1, column=0, sticky="ew")
+    def _status_row(
+        self,
+        grid: QGridLayout,
+        row: int,
+        label: str,
+        initial: str,
+    ) -> tuple[QLabel, QLabel]:
+        field = QLabel(label)
+        field.setObjectName("FieldLabel")
+        dot = QLabel("●")
+        dot.setObjectName("StatusDotNeutral")
+        value = QLabel(initial)
+        value.setWordWrap(True)
+        grid.addWidget(field, row, 0)
+        grid.addWidget(dot, row, 1)
+        grid.addWidget(value, row, 2)
+        return dot, value
 
-    def _tab_changed(self, _event: tk.Event | None = None) -> None:
-        if self.tabs.select() != str(self.logs_tab):
-            return
-        self._build_logs_tab()
-        self.refresh_logs()
+    def _metadata_row(
+        self,
+        grid: QGridLayout,
+        row: int,
+        label: str,
+        initial: str = "",
+    ) -> QLabel:
+        field = QLabel(label)
+        field.setObjectName("FieldLabel")
+        value = QLabel(initial)
+        value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        value.setWordWrap(True)
+        grid.addWidget(field, row, 0)
+        grid.addWidget(value, row, 1, 1, 2)
+        return value
+
+    def _build_configuration_page(self) -> QWidget:
+        page, layout = self._page(
+            "Configuration",
+            "Configure RADAR, VNPAY SSO, the local APK Scanner and worker timing.",
+        )
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 6, 0)
+
+        panel, panel_layout = self._panel("Agent configuration")
+        form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        form.setHorizontalSpacing(28)
+        form.setVerticalSpacing(12)
+
+        self.base_url = self._line_edit("https://radar.example.com")
+        self.agent_id = self._line_edit("windows-scanner-01")
+        self.display_name = self._line_edit("Windows Scanner 01")
+        self.scanner_url = self._line_edit("http://127.0.0.1:8000")
+        self.token_url = self._line_edit("https://sso.example.com/realms/.../token")
+        self.client_id = self._line_edit("vnpay-radar-agent")
+        self.client_secret = self._line_edit()
+        self.client_secret.setEchoMode(QLineEdit.EchoMode.Password)
+        self.client_secret.setPlaceholderText("Leave blank to keep the protected value")
+        self.device_model = self._line_edit("Android Device")
+        self.heartbeat_interval = self._spinbox(5, 30)
+        self.poll_wait = self._spinbox(0, 25)
+        self.lease_interval = self._spinbox(5, 30)
+        self.scanner_timeout = self._spinbox(30, 900)
+        self.retry_delay = self._spinbox(1, 60)
+
+        for label, widget in (
+            ("RADAR URL", self.base_url),
+            ("Agent ID", self.agent_id),
+            ("Display name", self.display_name),
+            ("APK Scanner URL", self.scanner_url),
+            ("SSO token URL", self.token_url),
+            ("Client ID", self.client_id),
+            ("Client secret", self.client_secret),
+            ("Device model fallback", self.device_model),
+            ("Heartbeat interval (seconds)", self.heartbeat_interval),
+            ("Claim wait (seconds)", self.poll_wait),
+            ("Lease renewal (seconds)", self.lease_interval),
+            ("Scanner timeout (seconds)", self.scanner_timeout),
+            ("Retry delay (seconds)", self.retry_delay),
+        ):
+            field_label = QLabel(label)
+            field_label.setObjectName("FieldLabel")
+            form.addRow(field_label, widget)
+
+        self.verify_tls = QCheckBox("Verify TLS certificates")
+        form.addRow(self._field_label("TLS"), self.verify_tls)
+        panel_layout.addLayout(form)
+        note = QLabel("Client secret is encrypted with Windows DPAPI when saved.")
+        note.setObjectName("MutedLabel")
+        panel_layout.addWidget(note)
+        actions = QHBoxLayout()
+        save_button = QPushButton("Save configuration")
+        save_button.setObjectName("PrimaryButton")
+        save_button.clicked.connect(lambda: self.save_configuration())
+        reload_button = QPushButton("Reload")
+        reload_button.clicked.connect(self.reload_configuration)
+        actions.addWidget(save_button)
+        actions.addWidget(reload_button)
+        actions.addStretch()
+        panel_layout.addLayout(actions)
+        body_layout.addWidget(panel)
+        body_layout.addStretch()
+        scroll.setWidget(body)
+        layout.addWidget(scroll, 1)
+        return page
+
+    def _field_label(self, text: str) -> QLabel:
+        label = QLabel(text)
+        label.setObjectName("FieldLabel")
+        return label
+
+    def _line_edit(self, placeholder: str = "") -> QLineEdit:
+        edit = QLineEdit()
+        edit.setPlaceholderText(placeholder)
+        edit.setClearButtonEnabled(True)
+        return edit
+
+    def _spinbox(self, minimum: int, maximum: int) -> QSpinBox:
+        spin = QSpinBox()
+        spin.setRange(minimum, maximum)
+        spin.setFixedWidth(150)
+        return spin
+
+    def _build_diagnostics_page(self) -> QWidget:
+        page, layout = self._page(
+            "Diagnostics",
+            "Run independent connectivity checks. Results appear as each component completes.",
+        )
+        toolbar = QHBoxLayout()
+        self.diagnostic_button = QPushButton("Run checks")
+        self.diagnostic_button.setObjectName("PrimaryButton")
+        self.diagnostic_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+        )
+        self.diagnostic_button.clicked.connect(self.run_checks)
+        self.diagnostic_summary_label = QLabel("Not run")
+        self.diagnostic_summary_label.setObjectName("MutedLabel")
+        toolbar.addWidget(self.diagnostic_button)
+        toolbar.addWidget(self.diagnostic_summary_label)
+        toolbar.addStretch()
+        layout.addLayout(toolbar)
+
+        self.diagnostic_table = QTableWidget(0, 4)
+        self.diagnostic_table.setHorizontalHeaderLabels(
+            ["Component", "Result", "Detail", "Latency"]
+        )
+        self.diagnostic_table.setAlternatingRowColors(True)
+        self.diagnostic_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.diagnostic_table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
+        self.diagnostic_table.verticalHeader().setVisible(False)
+        self.diagnostic_table.verticalHeader().setDefaultSectionSize(46)
+        header = self.diagnostic_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        layout.addWidget(self.diagnostic_table, 1)
+        return page
+
+    def _build_logs_page(self) -> QWidget:
+        page, layout = self._page(
+            "Logs",
+            "Review recent worker output without leaving Scanner Manager.",
+        )
+        toolbar = QHBoxLayout()
+        self.log_search = QLineEdit()
+        self.log_search.setPlaceholderText("Find in logs")
+        self.log_search.setMaximumWidth(300)
+        self.log_search.textChanged.connect(self._find_log_text)
+        refresh = QPushButton("Refresh")
+        refresh.clicked.connect(self.refresh_logs)
+        copy = QPushButton("Copy")
+        copy.clicked.connect(self._copy_logs)
+        folder = QPushButton("Open folder")
+        folder.clicked.connect(self.open_log_folder)
+        self.log_autoscroll = QCheckBox("Auto-scroll")
+        self.log_autoscroll.setChecked(True)
+        toolbar.addWidget(self.log_search)
+        toolbar.addWidget(refresh)
+        toolbar.addWidget(copy)
+        toolbar.addWidget(folder)
+        toolbar.addStretch()
+        toolbar.addWidget(self.log_autoscroll)
+        layout.addLayout(toolbar)
+
+        self.log_output = QPlainTextEdit()
+        self.log_output.setReadOnly(True)
+        self.log_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.log_output.setStyleSheet("font-family: Consolas; font-size: 12px;")
+        self.log_output.setPlaceholderText("No log output is available yet.")
+        layout.addWidget(self.log_output, 1)
+        return page
+
+    def _select_page(self, index: int) -> None:
+        self.page_stack.setCurrentIndex(index)
+        if 0 <= index < len(self.nav_buttons):
+            self.nav_buttons[index].setChecked(True)
+        if index == 3:
+            self.refresh_logs()
 
     def _load_settings_safely(self) -> AgentSettings:
         try:
@@ -445,41 +596,41 @@ class ManagerWindow(tk.Tk):
 
     def _load_form(self) -> None:
         settings = self._settings
-        self.base_url.set(settings.base_url)
-        self.agent_id.set(settings.id)
-        self.display_name.set(settings.display_name)
-        self.scanner_url.set(settings.scanner_url)
-        self.token_url.set(settings.token_url)
-        self.client_id.set(settings.client_id)
-        self.client_secret.set("")
-        self.device_model.set(settings.device_model)
-        self.verify_tls.set(settings.verify_tls)
-        self.heartbeat_interval.set(settings.heartbeat_interval_seconds)
-        self.poll_wait.set(settings.poll_wait_seconds)
-        self.lease_interval.set(settings.lease_renew_interval_seconds)
-        self.scanner_timeout.set(settings.scanner_timeout_seconds)
-        self.retry_delay.set(settings.retry_delay_seconds)
+        self.base_url.setText(settings.base_url)
+        self.agent_id.setText(settings.id)
+        self.display_name.setText(settings.display_name)
+        self.scanner_url.setText(settings.scanner_url)
+        self.token_url.setText(settings.token_url)
+        self.client_id.setText(settings.client_id)
+        self.client_secret.clear()
+        self.device_model.setText(settings.device_model)
+        self.verify_tls.setChecked(settings.verify_tls)
+        self.heartbeat_interval.setValue(settings.heartbeat_interval_seconds)
+        self.poll_wait.setValue(settings.poll_wait_seconds)
+        self.lease_interval.setValue(settings.lease_renew_interval_seconds)
+        self.scanner_timeout.setValue(settings.scanner_timeout_seconds)
+        self.retry_delay.setValue(settings.retry_delay_seconds)
 
     def _collect_settings(self) -> AgentSettings:
         secret_file = self._config_path.parent / "client-secret.dpapi"
         return AgentSettings(
             _env_file=None,
-            base_url=self.base_url.get().strip(),
-            id=self.agent_id.get().strip(),
-            display_name=self.display_name.get().strip(),
-            scanner_url=self.scanner_url.get().strip(),
-            token_url=self.token_url.get().strip(),
-            client_id=self.client_id.get().strip(),
-            client_secret=self.client_secret.get(),
+            base_url=self.base_url.text().strip(),
+            id=self.agent_id.text().strip(),
+            display_name=self.display_name.text().strip(),
+            scanner_url=self.scanner_url.text().strip(),
+            token_url=self.token_url.text().strip(),
+            client_id=self.client_id.text().strip(),
+            client_secret=self.client_secret.text(),
             client_secret_file=secret_file if secret_file.exists() else None,
-            device_model=self.device_model.get().strip(),
+            device_model=self.device_model.text().strip(),
             database_path=self._config_path.parent / "agent.db",
-            verify_tls=self.verify_tls.get(),
-            heartbeat_interval_seconds=self.heartbeat_interval.get(),
-            poll_wait_seconds=self.poll_wait.get(),
-            lease_renew_interval_seconds=self.lease_interval.get(),
-            scanner_timeout_seconds=self.scanner_timeout.get(),
-            retry_delay_seconds=self.retry_delay.get(),
+            verify_tls=self.verify_tls.isChecked(),
+            heartbeat_interval_seconds=self.heartbeat_interval.value(),
+            poll_wait_seconds=self.poll_wait.value(),
+            lease_renew_interval_seconds=self.lease_interval.value(),
+            scanner_timeout_seconds=self.scanner_timeout.value(),
+            retry_delay_seconds=self.retry_delay.value(),
         )
 
     def reload_configuration(self) -> None:
@@ -495,242 +646,257 @@ class ManagerWindow(tk.Tk):
             save_settings(
                 settings,
                 self._config_path,
-                client_secret=self.client_secret.get(),
+                client_secret=self.client_secret.text(),
                 machine_scope=machine_scope,
             )
             self._settings = load_settings(self._config_path)
-            self.client_secret.set("")
+            self.client_secret.clear()
             if show_message:
-                messagebox.showinfo("Configuration", "Configuration saved securely.", parent=self)
+                QMessageBox.information(self, "Configuration", "Configuration saved securely.")
             self.refresh_status()
             return True
         except (ValidationError, ValueError, OSError) as exc:
-            messagebox.showerror("Configuration error", str(exc), parent=self)
+            QMessageBox.critical(self, "Configuration error", str(exc))
             return False
 
-    def refresh_status(self) -> None:
-        if self._status_refresh_running:
-            return
-        self._status_refresh_running = True
+    def _start_task(
+        self,
+        key: str,
+        operation: Callable[[], object],
+        on_success: Callable[[object], None],
+        on_error: Callable[[str], None],
+    ) -> bool:
+        if key in self._tasks:
+            return False
+        self._tasks[key] = (on_success, on_error)
 
         def worker() -> None:
             try:
-                state = query_service()
-            except Exception:
-                state = ServiceState(False, "unknown")
-            self.after(0, lambda: self._apply_status(state))
+                result = operation()
+            except Exception as exc:
+                self.events.task_failed.emit(key, str(exc))
+            else:
+                self.events.task_completed.emit(key, result)
 
-        threading.Thread(target=worker, name="manager-status-refresh", daemon=True).start()
+        threading.Thread(target=worker, name=f"manager-{key}", daemon=True).start()
+        return True
+
+    @Slot(str, object)
+    def _task_completed(self, key: str, result: object) -> None:
+        callbacks = self._tasks.pop(key, None)
+        if callbacks:
+            callbacks[0](result)
+
+    @Slot(str, str)
+    def _task_failed(self, key: str, error: str) -> None:
+        callbacks = self._tasks.pop(key, None)
+        if callbacks:
+            callbacks[1](error)
+
+    def refresh_status(self) -> None:
+        self._start_task(
+            "status",
+            query_service,
+            lambda state: self._apply_status(state),
+            lambda _error: self._apply_status(ServiceState(False, "unknown")),
+        )
 
     def _apply_status(self, state: ServiceState) -> None:
-        self._status_refresh_running = False
         direct_running = self._direct_process is not None and self._direct_process.poll() is None
-        self.service_status.set(
-            f"{state.status} ({state.start_mode})" if state.installed else "Not installed"
+        self.service_status.setText(
+            f"{state.status.title()} ({state.start_mode})" if state.installed else "Not installed"
         )
-        self.direct_status.set("Running" if direct_running else "Stopped")
-        self.agent_status.set(self.agent_id.get() or self._settings.id)
+        service_tone = "success" if state.status == "running" else "warning"
+        if not state.installed or state.status == "unknown":
+            service_tone = "error"
+        self._set_dot(self.service_dot, service_tone)
+        self.direct_status.setText("Running" if direct_running else "Stopped")
+        self._set_dot(self.direct_dot, "success" if direct_running else "neutral")
+        self.agent_status.setText(self.agent_id.text() or self._settings.id)
         config_text = str(self._config_path)
         if self._configuration_error:
             config_text = f"{config_text} ({self._configuration_error})"
-        self.config_status.set(config_text)
-        self.package_status.set(str(self._package_root))
+        self.config_status.setText(config_text)
+        self.package_status.setText(str(self._package_root))
         if not self._interaction_locked:
-            self.start_button.configure(
-                state=tk.NORMAL if state.installed and state.status != "running" else tk.DISABLED
-            )
-            self.stop_button.configure(
-                state=tk.NORMAL if state.installed and state.status == "running" else tk.DISABLED
-            )
-            self.restart_button.configure(
-                state=tk.NORMAL if state.installed and state.status == "running" else tk.DISABLED
-            )
-            self.direct_start_button.configure(
-                state=tk.NORMAL if not direct_running and state.status != "running" else tk.DISABLED
-            )
-            self.direct_stop_button.configure(state=tk.NORMAL if direct_running else tk.DISABLED)
+            self.start_button.setEnabled(state.installed and state.status != "running")
+            self.stop_button.setEnabled(state.installed and state.status == "running")
+            self.restart_button.setEnabled(state.installed and state.status == "running")
+            self.direct_start_button.setEnabled(not direct_running and state.status != "running")
+            self.direct_stop_button.setEnabled(direct_running)
 
-    def _status_tick(self) -> None:
-        if self.winfo_exists():
-            self.refresh_status()
-            self.after(4000, self._status_tick)
+    def _set_dot(self, label: QLabel, tone: str) -> None:
+        names = {
+            "success": "StatusDotSuccess",
+            "error": "StatusDotError",
+            "warning": "StatusDotWarning",
+            "neutral": "StatusDotNeutral",
+        }
+        label.setObjectName(names[tone])
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+    def _set_label_tone(self, label: QLabel, tone: str) -> None:
+        names = {
+            "success": "StatusSuccess",
+            "error": "StatusError",
+            "warning": "StatusWarning",
+            "busy": "StatusBusy",
+            "neutral": "",
+        }
+        label.setObjectName(names[tone])
+        label.style().unpolish(label)
+        label.style().polish(label)
 
     def _set_interaction_locked(self, locked: bool, message: str = "") -> None:
-        interactive_types = (
-            ttk.Button,
-            ttk.Checkbutton,
-            ttk.Entry,
-            ttk.Notebook,
-            ttk.Scrollbar,
-            ttk.Spinbox,
-            ttk.Treeview,
-        )
+        self._interaction_locked = locked
+        self.sidebar.setEnabled(not locked)
+        self.page_stack.setEnabled(not locked)
         if locked:
-            if self._interaction_locked:
-                self.busy_status.set(message)
-                return
-            self._interaction_locked = True
-            self._locked_widget_states.clear()
-            pending = list(self.winfo_children())
-            while pending:
-                widget = pending.pop()
-                pending.extend(widget.winfo_children())
-                if isinstance(widget, interactive_types):
-                    self._locked_widget_states[widget] = "disabled" in widget.state()
-                    widget.state(["disabled"])
-            self.configure(cursor="wait")
-            self.busy_status.set(message)
-            return
-
-        for widget, was_disabled in self._locked_widget_states.items():
-            if widget.winfo_exists():
-                widget.state(["disabled"] if was_disabled else ["!disabled"])
-        self._locked_widget_states.clear()
-        self._interaction_locked = False
-        self.configure(cursor="")
-        self.busy_status.set("")
-        self.refresh_status()
+            self.setCursor(Qt.CursorShape.WaitCursor)
+            self.busy_status.setText(message)
+            self.busy_progress.setRange(0, 0)
+            self.busy_banner.show()
+        else:
+            self.unsetCursor()
+            self.busy_banner.hide()
+            self.refresh_status()
 
     def check_for_updates(self, *, silent: bool = False) -> None:
         if self._update_check_running or self._update_install_running:
             return
         self._update_check_running = True
-        self.check_update_button.configure(state=tk.DISABLED)
-        self.install_update_button.configure(state=tk.DISABLED)
-        self.update_status.set("Checking for updates...")
-        self.update_status_label.configure(style="Status.TLabel")
+        self.check_update_button.setEnabled(False)
+        self.install_update_button.setEnabled(False)
+        self.update_status_label.setText("Checking for updates...")
+        self._set_label_tone(self.update_status_label, "busy")
+        self._start_task(
+            "update-check",
+            lambda: check_for_update(__version__),
+            lambda result: self._show_update_result(result),
+            lambda error: self._show_update_error(error, silent),
+        )
 
-        def worker() -> None:
-            try:
-                update = check_for_update(__version__)
-            except Exception as exc:
-                error = str(exc)
-                self.after(0, lambda message=error: self._show_update_error(message, silent))
-            else:
-                self.after(0, lambda: self._show_update_result(update))
-
-        threading.Thread(target=worker, daemon=True).start()
-
-    def _show_update_result(self, update: UpdateInfo) -> None:
+    def _show_update_result(self, update: object) -> None:
+        assert isinstance(update, UpdateInfo)
         self._update_check_running = False
-        self.check_update_button.configure(state=tk.NORMAL)
+        self.check_update_button.setEnabled(True)
         if update.available:
             self._available_update = update
-            self.update_status.set(f"Version {update.latest_version} is available")
-            self.update_status_label.configure(style="Update.TLabel")
-            self.install_update_button.configure(state=tk.NORMAL)
+            self.update_status_label.setText(f"Version {update.latest_version} is available")
+            self._set_label_tone(self.update_status_label, "warning")
+            self.install_update_button.setEnabled(True)
         else:
             self._available_update = None
-            self.update_status.set(f"Up to date ({__version__})")
-            self.update_status_label.configure(style="Success.TLabel")
-            self.install_update_button.configure(state=tk.DISABLED)
+            self.update_status_label.setText(f"Up to date ({__version__})")
+            self._set_label_tone(self.update_status_label, "success")
+            self.install_update_button.setEnabled(False)
 
     def _show_update_error(self, error: str, silent: bool) -> None:
         self._update_check_running = False
-        self.check_update_button.configure(state=tk.NORMAL)
-        self.install_update_button.configure(
-            state=tk.NORMAL if self._available_update else tk.DISABLED
-        )
-        self.update_status.set("Unable to check for updates")
-        self.update_status_label.configure(style="Error.TLabel")
+        self.check_update_button.setEnabled(True)
+        self.install_update_button.setEnabled(self._available_update is not None)
+        self.update_status_label.setText("Unable to check for updates")
+        self._set_label_tone(self.update_status_label, "error")
         if not silent:
-            messagebox.showerror("Software update", error, parent=self)
+            QMessageBox.critical(self, "Software update", error)
 
     def _show_installer_status(self, status: InstallerStatus | None) -> None:
         if status is None:
             return
         version = status.version or "unknown"
         if status.state == "success" and version == __version__:
-            self.update_status.set(f"Updated successfully to version {version}")
-            self.update_status_label.configure(style="Success.TLabel")
+            self.update_status_label.setText(f"Updated successfully to version {version}")
+            self._set_label_tone(self.update_status_label, "success")
             return
         if status.state == "failed":
             detail = f": {status.message}" if status.message else ""
-            self.update_status.set(f"Update to version {version} failed{detail}")
+            text = f"Update to version {version} failed{detail}"
         elif status.state == "installing":
-            self.update_status.set(
-                f"Update to version {version} did not complete. Run the installer again."
-            )
+            text = f"Update to version {version} did not complete. Run the installer again."
         else:
-            self.update_status.set(
-                f"Setup reported version {version}, but Manager is version {__version__}"
-            )
-        self.update_status_label.configure(style="Error.TLabel")
+            text = f"Setup reported version {version}, but Manager is version {__version__}"
+        self.update_status_label.setText(text)
+        self._set_label_tone(self.update_status_label, "error")
 
     def install_available_update(self) -> None:
         update = self._available_update
         if update is None or self._update_install_running:
             return
         if self._diagnostics_running or self._operation_running:
-            messagebox.showwarning(
+            QMessageBox.warning(
+                self,
                 "Software update",
                 "Wait for the current operation to finish before updating.",
-                parent=self,
             )
             return
-        confirmed = messagebox.askyesno(
+        answer = QMessageBox.question(
+            self,
             "Software update",
             f"Install version {update.latest_version} now?\n\n"
             "The Manager will close and the Windows Service will restart automatically.",
-            parent=self,
         )
-        if not confirmed:
+        if answer != QMessageBox.StandardButton.Yes:
             return
 
         self._update_install_running = True
         self._set_interaction_locked(
             True,
-            f"UPDATE IN PROGRESS · Downloading version {update.latest_version}",
+            f"Downloading Scanner Agent {update.latest_version}",
         )
-        self.update_status.set(f"Downloading version {update.latest_version}...")
-        self.update_status_label.configure(style="Status.TLabel")
+        self.update_status_label.setText(f"Downloading version {update.latest_version}...")
+        self._set_label_tone(self.update_status_label, "busy")
 
         def progress(received: int, total: int | None) -> None:
             if total:
                 percent = min(100, int(received * 100 / total))
-                message = f"Downloading version {update.latest_version}... {percent}%"
+                message = f"Downloading Scanner Agent {update.latest_version} · {percent}%"
             else:
-                message = f"Downloading version {update.latest_version}... {received // 1024} KB"
-            self.after(0, lambda text=message: self._show_update_progress(text))
-
-        def worker() -> None:
-            try:
-                installer = download_installer(
-                    update,
-                    program_data_directory() / "updates",
-                    progress=progress,
+                percent = -1
+                message = (
+                    f"Downloading Scanner Agent {update.latest_version} · " f"{received // 1024} KB"
                 )
-            except Exception as exc:
-                error = str(exc)
-                self.after(0, lambda message=error: self._update_download_failed(message))
-            else:
-                self.after(
-                    0,
-                    lambda: self._launch_downloaded_update(installer, update.latest_version),
-                )
+            self.events.update_progress.emit(message, percent)
 
-        threading.Thread(target=worker, daemon=True).start()
+        self._start_task(
+            "update-download",
+            lambda: download_installer(
+                update,
+                program_data_directory() / "updates",
+                progress=progress,
+            ),
+            lambda installer: self._launch_downloaded_update(
+                Path(installer), update.latest_version
+            ),
+            self._update_download_failed,
+        )
 
-    def _show_update_progress(self, message: str) -> None:
-        self.update_status.set(message)
-        self.busy_status.set(f"UPDATE IN PROGRESS · {message}")
+    @Slot(str, int)
+    def _show_update_progress(self, message: str, percent: int = -1) -> None:
+        self.update_status_label.setText(message)
+        self.busy_status.setText(message)
+        if percent >= 0:
+            self.busy_progress.setRange(0, 100)
+            self.busy_progress.setValue(percent)
+        else:
+            self.busy_progress.setRange(0, 0)
 
     def _update_download_failed(self, error: str) -> None:
         self._update_install_running = False
         self._set_interaction_locked(False)
-        self.check_update_button.configure(state=tk.NORMAL)
-        self.install_update_button.configure(state=tk.NORMAL)
-        self.update_status.set("Update download failed")
-        self.update_status_label.configure(style="Error.TLabel")
-        messagebox.showerror("Software update", error, parent=self)
+        self.check_update_button.setEnabled(True)
+        self.install_update_button.setEnabled(True)
+        self.update_status_label.setText("Update download failed")
+        self._set_label_tone(self.update_status_label, "error")
+        QMessageBox.critical(self, "Software update", error)
 
     def _launch_downloaded_update(self, installer: Path, target_version: str) -> None:
         try:
             if self._direct_process is not None and self._direct_process.poll() is None:
                 self.stop_direct()
-            self.update_status.set("Starting update progress window...")
-            self.busy_status.set("UPDATE IN PROGRESS · Starting installer")
-            self.update_idletasks()
+            self.update_status_label.setText("Starting update progress window...")
+            self.busy_status.setText("Starting update installer")
+            self.busy_progress.setRange(0, 0)
             updater = self._package_root / "radar-scanner-updater.exe"
             if updater.is_file():
                 launch_updater(updater, installer, target_version)
@@ -739,32 +905,31 @@ class ManagerWindow(tk.Tk):
         except Exception as exc:
             self._update_download_failed(str(exc))
             return
-        self.update_status.set("Updater started. Manager will close during installation...")
-        self.busy_status.set("UPDATE IN PROGRESS · Waiting for installer")
+        self.update_status_label.setText(
+            "Updater started. Manager will close during installation..."
+        )
+        self.busy_status.setText("Installer is preparing the upgrade")
 
-    def _run_operation(self, operation, *, title: str, success_message: str) -> None:
+    def _run_operation(
+        self,
+        operation: Callable[[], object],
+        *,
+        title: str,
+        success_message: str,
+    ) -> None:
         if self._operation_running:
             return
         self._operation_running = True
 
-        def worker() -> None:
-            try:
-                operation()
-            except Exception as exc:
-                error = str(exc)
-                self.after(
-                    0,
-                    lambda message=error: messagebox.showerror(title, message, parent=self),
-                )
-            else:
-                self.after(
-                    0,
-                    lambda: messagebox.showinfo(title, success_message, parent=self),
-                )
-            finally:
-                self.after(0, self._operation_finished)
+        def success(_result: object) -> None:
+            QMessageBox.information(self, title, success_message)
+            self._operation_finished()
 
-        threading.Thread(target=worker, daemon=True).start()
+        def failure(error: str) -> None:
+            QMessageBox.critical(self, title, error)
+            self._operation_finished()
+
+        self._start_task("operation", operation, success, failure)
 
     def _operation_finished(self) -> None:
         self._operation_running = False
@@ -785,7 +950,7 @@ class ManagerWindow(tk.Tk):
         try:
             secret = settings.resolved_client_secret()
         except (ValueError, OSError) as exc:
-            messagebox.showerror("Service installation error", str(exc), parent=self)
+            QMessageBox.critical(self, "Service installation error", str(exc))
             return
 
         def operation() -> None:
@@ -815,19 +980,23 @@ class ManagerWindow(tk.Tk):
         )
 
     def start_direct(self) -> None:
-        state = query_service()
+        try:
+            state = query_service()
+        except Exception as exc:
+            QMessageBox.critical(self, "Direct run error", str(exc))
+            return
         if state.status == "running":
-            messagebox.showwarning(
+            QMessageBox.warning(
+                self,
                 "Direct run blocked",
                 "Stop the Windows Service before starting a direct Agent process.",
-                parent=self,
             )
             return
         if not self.save_configuration(show_message=False):
             return
         executable = worker_executable(self._package_root)
         if not executable.exists():
-            messagebox.showerror("Direct run error", f"Worker not found: {executable}", parent=self)
+            QMessageBox.critical(self, "Direct run error", f"Worker not found: {executable}")
             return
         try:
             self._direct_process = subprocess.Popen(
@@ -841,11 +1010,10 @@ class ManagerWindow(tk.Tk):
                 creationflags=_CREATE_NO_WINDOW,
             )
         except OSError as exc:
-            messagebox.showerror("Direct run error", str(exc), parent=self)
+            QMessageBox.critical(self, "Direct run error", str(exc))
             return
         threading.Thread(target=self._read_process_output, daemon=True).start()
-        self._build_logs_tab()
-        self.tabs.select(self.logs_tab)
+        self._select_page(3)
         self._set_log_text("")
         self.refresh_status()
 
@@ -854,19 +1022,11 @@ class ManagerWindow(tk.Tk):
         if process is None or process.stdout is None:
             return
         for line in process.stdout:
-            self._process_output.put(line)
+            self.events.process_output.emit(line)
         process.wait()
-        self._process_output.put(f"\nDirect process exited with code {process.returncode}.\n")
-
-    def _drain_process_output(self) -> None:
-        while True:
-            try:
-                output = self._process_output.get_nowait()
-            except queue.Empty:
-                break
-            self._append_log_text(output)
-        if self.winfo_exists():
-            self.after(500, self._drain_process_output)
+        self.events.process_output.emit(
+            f"\nDirect process exited with code {process.returncode}.\n"
+        )
 
     def stop_direct(self) -> None:
         process = self._direct_process
@@ -887,121 +1047,125 @@ class ManagerWindow(tk.Tk):
             settings = self._collect_settings()
             settings.validate_runtime()
         except (ValidationError, ValueError, OSError) as exc:
-            messagebox.showerror("Diagnostics", str(exc), parent=self)
+            QMessageBox.critical(self, "Diagnostics", str(exc))
             return
         self._diagnostics_running = True
         self._diagnostic_results.clear()
-        self._diagnostic_items.clear()
-        self.diagnostic_button.configure(state=tk.DISABLED)
-        self.install_update_button.configure(state=tk.DISABLED)
-        self.diagnostic_summary.set(f"Running 0/{len(_DIAGNOSTIC_STEPS)} checks")
-        self.diagnostic_summary_label.configure(style="Busy.TLabel")
-        for item in self.diagnostic_table.get_children():
-            self.diagnostic_table.delete(item)
-        for key, label in _DIAGNOSTIC_STEPS:
-            self._diagnostic_items[key] = self.diagnostic_table.insert(
-                "",
-                tk.END,
-                values=(label, "WAITING", "Waiting to run", "—"),
-                tags=("waiting",),
-            )
+        self._diagnostic_rows.clear()
+        self.diagnostic_button.setEnabled(False)
+        self.install_update_button.setEnabled(False)
+        self.diagnostic_summary_label.setText(f"Running 0/{len(_DIAGNOSTIC_STEPS)} checks")
+        self._set_label_tone(self.diagnostic_summary_label, "busy")
+        self.diagnostic_table.setRowCount(len(_DIAGNOSTIC_STEPS))
+        for row, (key, label) in enumerate(_DIAGNOSTIC_STEPS):
+            self._diagnostic_rows[key] = row
+            self._set_diagnostic_row(row, label, "WAITING", "Waiting to run", "—", MUTED)
 
-        def worker() -> None:
-            try:
-                results = asyncio.run(
-                    run_diagnostics(
-                        settings,
-                        on_started=lambda key, label: self.after(
-                            0,
-                            lambda: self._diagnostic_started(key, label),
-                        ),
-                        on_result=lambda result: self.after(
-                            0,
-                            lambda: self._diagnostic_completed(result),
-                        ),
-                    )
+        def worker() -> list[DiagnosticResult]:
+            return asyncio.run(
+                run_diagnostics(
+                    settings,
+                    on_started=lambda key, label: self.events.diagnostic_started.emit(key, label),
+                    on_result=lambda result: self.events.diagnostic_completed.emit(result),
                 )
-            except Exception as exc:
-                error = str(exc)
-                self.after(0, lambda message=error: self._diagnostics_failed(message))
-            else:
-                self.after(0, lambda: self._diagnostics_finished(results))
+            )
 
-        threading.Thread(target=worker, daemon=True).start()
+        self._start_task(
+            "diagnostics",
+            worker,
+            lambda results: self._diagnostics_finished(list(results)),
+            self._diagnostics_failed,
+        )
 
+    def _set_diagnostic_row(
+        self,
+        row: int,
+        component: str,
+        result: str,
+        detail: str,
+        latency: str,
+        color: str,
+    ) -> None:
+        values = (component, result, detail, latency)
+        for column, value in enumerate(values):
+            item = self.diagnostic_table.item(row, column) or QTableWidgetItem()
+            item.setText(value)
+            if column == 1:
+                item.setForeground(QBrush(QColor(color)))
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
+            self.diagnostic_table.setItem(row, column, item)
+
+    @Slot(str, str)
     def _diagnostic_started(self, key: str, label: str) -> None:
-        item = self._diagnostic_items.get(key)
-        if item:
-            self.diagnostic_table.item(
-                item,
-                values=(label, "RUNNING", "Checking connection...", "—"),
-                tags=("running",),
+        row = self._diagnostic_rows.get(key)
+        if row is not None:
+            self._set_diagnostic_row(
+                row,
+                label,
+                "RUNNING",
+                "Checking connection...",
+                "—",
+                BLUE_BRIGHT,
             )
-            self.diagnostic_table.see(item)
 
-    def _diagnostic_completed(self, result: DiagnosticResult) -> None:
+    @Slot(object)
+    def _diagnostic_completed(self, result: object) -> None:
+        assert isinstance(result, DiagnosticResult)
         self._diagnostic_results[result.key] = result
-        item = self._diagnostic_items.get(result.key)
-        if item:
-            self.diagnostic_table.item(
-                item,
-                values=(
-                    result.label,
-                    "PASSED" if result.success else "FAILED",
-                    result.detail,
-                    f"{result.duration_ms} ms",
-                ),
-                tags=("passed" if result.success else "failed",),
+        row = self._diagnostic_rows.get(result.key)
+        if row is not None:
+            self._set_diagnostic_row(
+                row,
+                result.label,
+                "PASSED" if result.success else "FAILED",
+                result.detail,
+                f"{result.duration_ms} ms",
+                GREEN if result.success else RED,
             )
-            self.diagnostic_table.see(item)
-        passed = sum(result.success for result in self._diagnostic_results.values())
+        passed = sum(item.success for item in self._diagnostic_results.values())
         completed = len(self._diagnostic_results)
-        self.diagnostic_summary.set(
+        self.diagnostic_summary_label.setText(
             f"Running {completed}/{len(_DIAGNOSTIC_STEPS)} · {passed} passed"
         )
 
     def _diagnostics_finished(self, results: list[DiagnosticResult]) -> None:
         self._diagnostics_running = False
         passed = sum(result.success for result in results)
-        self.diagnostic_summary.set(f"{passed}/{len(results)} checks passed")
-        self.diagnostic_summary_label.configure(
-            style="Success.TLabel" if passed == len(results) else "Error.TLabel"
+        self.diagnostic_summary_label.setText(f"{passed}/{len(results)} checks passed")
+        self._set_label_tone(
+            self.diagnostic_summary_label,
+            "success" if passed == len(results) else "error",
         )
         if not self._interaction_locked:
-            self.diagnostic_button.configure(state=tk.NORMAL)
-            self.install_update_button.configure(
-                state=tk.NORMAL if self._available_update else tk.DISABLED
-            )
+            self.diagnostic_button.setEnabled(True)
+            self.install_update_button.setEnabled(self._available_update is not None)
 
     def _diagnostics_failed(self, error: str) -> None:
         self._diagnostics_running = False
-        self.diagnostic_summary.set("Diagnostics failed")
-        self.diagnostic_summary_label.configure(style="Error.TLabel")
+        self.diagnostic_summary_label.setText("Diagnostics failed")
+        self._set_label_tone(self.diagnostic_summary_label, "error")
         if not self._interaction_locked:
-            self.diagnostic_button.configure(state=tk.NORMAL)
-            self.install_update_button.configure(
-                state=tk.NORMAL if self._available_update else tk.DISABLED
-            )
-        messagebox.showerror("Diagnostics", error, parent=self)
+            self.diagnostic_button.setEnabled(True)
+            self.install_update_button.setEnabled(self._available_update is not None)
+        QMessageBox.critical(self, "Diagnostics", error)
 
     def _set_log_text(self, content: str) -> None:
-        self.log_output.configure(state=tk.NORMAL)
-        self.log_output.delete("1.0", tk.END)
-        self.log_output.insert(tk.END, content)
-        self.log_output.yview_moveto(1.0)
-        self.log_output.xview_moveto(0.0)
-        self.log_output.configure(state=tk.DISABLED)
+        self.log_output.setPlainText(content)
+        if self.log_autoscroll.isChecked():
+            self.log_output.moveCursor(QTextCursor.MoveOperation.End)
 
+    @Slot(str)
     def _append_log_text(self, content: str) -> None:
-        self.log_output.configure(state=tk.NORMAL)
-        self.log_output.insert(tk.END, content)
-        self.log_output.yview_moveto(1.0)
-        self.log_output.xview_moveto(0.0)
-        self.log_output.configure(state=tk.DISABLED)
+        cursor = self.log_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.insertText(content)
+        if self.log_autoscroll.isChecked():
+            self.log_output.setTextCursor(cursor)
+            self.log_output.ensureCursorVisible()
 
     def refresh_logs(self) -> None:
-        if not self._logs_built:
-            return
         if self._direct_process is not None and self._direct_process.poll() is None:
             return
         try:
@@ -1009,15 +1173,30 @@ class ManagerWindow(tk.Tk):
         except OSError as exc:
             self._set_log_text(f"Unable to read logs: {exc}")
 
+    def _find_log_text(self, query: str) -> None:
+        if not query:
+            return
+        cursor = self.log_output.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+        self.log_output.setTextCursor(cursor)
+        self.log_output.find(query)
+
+    def _copy_logs(self) -> None:
+        selected = self.log_output.textCursor().selectedText()
+        QApplication.clipboard().setText(selected or self.log_output.toPlainText())
+
     def open_log_folder(self) -> None:
         folder = service_log_path().parent
         folder.mkdir(parents=True, exist_ok=True)
-        os.startfile(folder)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     def _start_tray(self) -> None:
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            return
         try:
             self._tray = TrayController(
-                dispatch=lambda callback: self.after(0, callback),
+                parent=self,
+                icon=radar_icon(),
                 open_manager=self._show_manager,
                 run_diagnostics=self._run_diagnostics_from_tray,
                 open_logs=self._open_logs_from_tray,
@@ -1033,60 +1212,64 @@ class ManagerWindow(tk.Tk):
             self._tray = None
 
     def _show_manager(self) -> None:
-        self.deiconify()
-        self.state("normal")
-        self.lift()
-        self.focus_force()
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
 
     def _run_diagnostics_from_tray(self) -> None:
         if self._interaction_locked:
             return
         self._show_manager()
-        self.tabs.select(self.diagnostics_tab)
+        self._select_page(2)
         self.run_checks()
 
     def _open_logs_from_tray(self) -> None:
         if self._interaction_locked:
             return
         self._show_manager()
-        self._build_logs_tab()
-        self.tabs.select(self.logs_tab)
-        self.refresh_logs()
+        self._select_page(3)
 
     def _exit_application(self) -> None:
         if self._interaction_locked:
-            messagebox.showinfo(
+            QMessageBox.information(
+                self,
                 "Update in progress",
                 "Scanner Manager cannot exit while an update is in progress.",
-                parent=self,
             )
             return
         direct_running = self._direct_process is not None and self._direct_process.poll() is None
         if direct_running:
-            should_close = messagebox.askyesno(
+            answer = QMessageBox.question(
+                self,
                 "Stop direct process?",
                 "Exiting the Manager will stop the direct Agent process. Continue?",
-                parent=self,
             )
-            if not should_close:
+            if answer != QMessageBox.StandardButton.Yes:
                 return
             self.stop_direct()
+        self._exiting = True
         if self._tray is not None:
             self._tray.stop()
-        self.destroy()
+        QApplication.quit()
 
-    def _close_window(self) -> None:
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._exiting:
+            event.accept()
+            return
         if self._interaction_locked:
-            messagebox.showinfo(
+            QMessageBox.information(
+                self,
                 "Update in progress",
                 "Wait for the update process to open before closing Scanner Manager.",
-                parent=self,
             )
+            event.ignore()
             return
         if self._tray is None:
             self._exit_application()
+            event.accept()
             return
-        self.withdraw()
+        self.hide()
+        event.ignore()
         if not self._tray_notice_shown:
             self._tray_notice_shown = True
             self._tray.notify_minimized()
@@ -1098,8 +1281,14 @@ def main() -> None:
         focus_existing_manager()
         return
     try:
-        application = ManagerWindow()
-        application.mainloop()
+        application = QApplication(sys.argv)
+        application.setApplicationName("VNPAY RADAR Scanner Manager")
+        application.setApplicationVersion(__version__)
+        application.setQuitOnLastWindowClosed(False)
+        configure_radar_theme(application)
+        window = ManagerWindow()
+        window.show()
+        raise SystemExit(application.exec())
     finally:
         instance.close()
 

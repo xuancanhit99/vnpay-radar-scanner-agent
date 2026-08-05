@@ -5,6 +5,7 @@
 - Windows 10/11 x64 để đóng gói và kiểm thử tích hợp service.
 - Python 3.12.
 - [`uv`](https://docs.astral.sh/uv/) để quản lý dependency và môi trường ảo.
+- PySide6 Essentials/Qt Widgets cho giao diện Manager, Updater và system tray.
 - PyInstaller để tạo file thực thi cho Worker và Manager.
 - NSIS để tạo file Setup.
 - WinSW `2.12.0`, được script build tải xuống và kiểm tra checksum.
@@ -25,7 +26,9 @@ vnpay-radar-scanner-agent/
 |   |-- scanner_client.py   # Adapter gọi APK Scanner cục bộ
 |   |-- job_runner.py       # Điều phối lease và kết quả
 |   |-- outbox.py           # SQLite outbox lưu kết quả
-|   |-- manager.py          # Windows Manager dùng tkinter/ttk
+|   |-- manager.py          # Windows Manager dùng PySide6/Qt Widgets
+|   |-- desktop_theme.py    # Design token và Qt Style Sheet dùng chung
+|   |-- desktop_shell.py    # Single-instance guard, icon và system tray Qt
 |   |-- config_store.py     # Tuần tự hóa .env và tích hợp DPAPI
 |   `-- secret_store.py     # Các hàm Windows DPAPI cơ bản
 |-- packaging/
