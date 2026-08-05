@@ -605,10 +605,22 @@ class ManagerWindow(QMainWindow):
         self.diagnostic_table.verticalHeader().setVisible(False)
         self.diagnostic_table.verticalHeader().setDefaultSectionSize(46)
         header = self.diagnostic_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        self.diagnostic_table.setColumnWidth(0, 180)
+        self.diagnostic_table.setColumnWidth(1, 116)
+        self.diagnostic_table.setColumnWidth(3, 116)
+        for column in range(self.diagnostic_table.columnCount()):
+            alignment = (
+                Qt.AlignmentFlag.AlignRight
+                if column == 3
+                else Qt.AlignmentFlag.AlignLeft
+            )
+            self.diagnostic_table.horizontalHeaderItem(column).setTextAlignment(
+                alignment | Qt.AlignmentFlag.AlignVCenter
+            )
         layout.addWidget(self.diagnostic_table, 1)
         return page
 
@@ -1171,6 +1183,10 @@ class ManagerWindow(QMainWindow):
                 font = item.font()
                 font.setBold(True)
                 item.setFont(font)
+            if column == 3:
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                )
             self.diagnostic_table.setItem(row, column, item)
 
     @Slot(str, str)

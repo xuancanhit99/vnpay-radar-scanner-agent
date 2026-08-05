@@ -1,6 +1,7 @@
 import os
 
-from PySide6.QtWidgets import QApplication, QCheckBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QCheckBox, QHeaderView
 
 from radar_agent.desktop_theme import configure_radar_theme
 from radar_agent.manager import ManagerWindow
@@ -63,10 +64,10 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     application = _application()
     window = ManagerWindow(start_background_tasks=False)
 
-    current = UpdateInfo("0.7.2", "0.7.2", False, "", "", "", "")
+    current = UpdateInfo("0.7.3", "0.7.3", False, "", "", "", "")
     available = UpdateInfo(
-        "0.7.2",
         "0.7.3",
+        "0.7.4",
         True,
         "https://github.com/example/release",
         "setup.exe",
@@ -104,6 +105,32 @@ def test_diagnostics_button_uses_animated_running_state(tmp_path, monkeypatch) -
         window._set_diagnostics_running_visual(False)
         assert window.diagnostic_button.text() == "Run checks"
         assert not window._diagnostic_spinner_timer.isActive()
+        application.processEvents()
+    finally:
+        window._exiting = True
+        window.close()
+
+
+def test_diagnostics_table_uses_balanced_columns(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RADAR_AGENT_MANAGER_CONFIG", str(tmp_path / ".env"))
+    application = _application()
+    window = ManagerWindow(start_background_tasks=False)
+
+    try:
+        table = window.diagnostic_table
+        header = table.horizontalHeader()
+
+        assert table.columnWidth(0) == 180
+        assert table.columnWidth(1) == 116
+        assert table.columnWidth(3) == 116
+        assert header.sectionResizeMode(2) == QHeaderView.ResizeMode.Stretch
+
+        table.setRowCount(1)
+        window._set_diagnostic_row(
+            0, "Android device", "FAILED", "ReadTimeout", "20000 ms", "#dc2626"
+        )
+        latency_alignment = table.item(0, 3).textAlignment()
+        assert latency_alignment & int(Qt.AlignmentFlag.AlignRight)
         application.processEvents()
     finally:
         window._exiting = True

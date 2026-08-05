@@ -35,6 +35,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.3` cân đối lại chiều rộng các cột Diagnostics, giữ cột Detail co giãn và căn phải
+  latency để người dùng so sánh thời gian phản hồi dễ hơn.
 - Bản `0.7.2` bổ sung spinner động cho Diagnostics, đồng bộ giao diện scrollbar ngang với
   scrollbar dọc và dùng checkbox indicator rõ ràng, nhất quán trong Manager/Updater.
 - Bản `0.7.1` chỉ hiển thị **Update now** khi có bản mới, thay spinbox native bằng stepper
