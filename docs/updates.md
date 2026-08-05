@@ -12,10 +12,12 @@ Khi xác nhận cập nhật, Manager thực hiện:
 2. Chỉ chấp nhận URL HTTPS thuộc GitHub hoặc `githubusercontent.com`.
 3. Tải Setup vào `C:\ProgramData\VNPAY\RadarScannerAgent\updates` với giới hạn 100 MiB.
 4. Tính SHA-256 và so sánh với checksum của release.
-5. Dừng direct process nếu đang chạy, yêu cầu quyền Administrator qua UAC, khởi chạy Setup ở
-   chế độ silent rồi đóng Manager.
-6. Setup dừng/khởi động lại Windows Service và giữ nguyên cấu hình, DPAPI secret, log, outbox.
-7. Sau khi nâng cấp thành công, Setup tự mở lại Scanner Manager bằng phiên bản mới.
+5. Dừng direct process nếu đang chạy và bàn giao package cho `radar-scanner-updater.exe` chạy
+   độc lập trong thư mục `updates`.
+6. Updater hiển thị các mốc đóng Manager, dừng service, thay file, khởi động service và xác minh
+   cài đặt trong khi Setup chạy silent.
+7. Setup giữ nguyên cấu hình, DPAPI secret, log, outbox và tự mở lại Scanner Manager sau khi
+   nâng cấp thành công.
 
 File `.partial` bị xóa nếu tải lỗi, vượt giới hạn hoặc checksum không khớp. Manager không chạy
 artifact không đạt kiểm tra.
@@ -33,6 +35,10 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.5.8` bổ sung cửa sổ Updater độc lập với Manager. Các bước cài đặt lấy từ trạng thái thật
+  do Setup ghi vào Registry; lỗi không làm mất cửa sổ mà hiển thị nguyên nhân, **Open logs** và
+  **Retry**. Setup `0.5.8` cũng tự bootstrap Updater khi được Manager cũ gọi bằng chế độ silent,
+  vì vậy lần nâng cấp từ `0.5.7` đã có giao diện tiến trình.
 - Bản `0.5.7` đổi nhãn quản lý Windows Service thành **Install / Reinstall** để thể hiện đúng
   thao tác cài mới hoặc đăng ký lại service; giữ nguyên bản sửa updater của `0.5.6`.
 - Bản `0.5.6` sửa nguyên nhân Setup bị đóng ngay sau khi tải xong: không còn dùng `taskkill /T`
@@ -50,6 +56,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 - Bản `0.5.0` nâng cấp thành công nhưng không tự mở lại Manager. Từ `0.5.1`, silent update tự
   relaunch Manager sau khi service đã chạy lại.
 - Auto-update chỉ chọn release mới hơn; không tự downgrade.
+- Không có nút hủy sau khi Setup bắt đầu thay file ứng dụng. Việc đóng Updater bị khóa trong giai
+  đoạn này để tránh để lại bản cài đặt không hoàn chỉnh.
 - Khi cần rollback, tải Setup version đã phê duyệt, kiểm tra checksum và chạy thủ công.
 - Artifact hiện chưa ký Authenticode. Trước production cần bổ sung ký số và xác minh signer trong
   updater, ngoài bước kiểm tra SHA-256 hiện tại.

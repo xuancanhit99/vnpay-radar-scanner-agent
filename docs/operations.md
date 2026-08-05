@@ -82,6 +82,7 @@ kết quả scanner.
 | Tải update thất bại | Asset thiếu, vượt giới hạn hoặc SHA-256 không khớp | Không chạy file đã tải; kiểm tra GitHub Release và file `SHA256SUMS`, rồi thử lại. |
 | Service không start sau khi cài lại | Service registration cũ chưa được gỡ hoàn toàn hoặc worker thoát khi khởi động | Mở tab **Logs** và kiểm tra `VNPAYRadarScannerAgent.err.log` cùng `VNPAYRadarScannerAgent.wrapper.log`. Từ bản `0.5.4`, Setup tự dọn registration mồ côi và không xóa application files nếu uninstall service thất bại. |
 | Manager đóng sau khi tải update nhưng không mở lại | Setup cũ dùng `taskkill /T`, làm đóng cả process Setup được Manager khởi chạy | Mở lại Manager và chạy **Update now** để tải bản `0.5.7` trở lên. Nếu Manager không mở được, cài Setup mới thủ công một lần. |
+| Updater báo lỗi khi đang cài đặt | Setup không dừng/khởi động được service, thiếu file hoặc tiến trình khác đang giữ file | Giữ cửa sổ Updater, chọn **Open logs**, xử lý nguyên nhân rồi chọn **Retry**. Log nằm tại `C:\ProgramData\VNPAY\RadarScannerAgent\logs\updater.log`. |
 
 ## Kiểm tra thiết bị trước khi chạy
 

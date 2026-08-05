@@ -2,6 +2,8 @@ import ctypes
 import hashlib
 import os
 import re
+import shutil
+import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -37,6 +39,7 @@ class InstallerStatus:
     state: str
     version: str
     message: str
+    stage: str = ""
 
 
 def read_installer_status() -> InstallerStatus | None:
@@ -55,11 +58,15 @@ def read_installer_status() -> InstallerStatus | None:
                 message = str(winreg.QueryValueEx(key, "LastUpdateMessage")[0]).strip()
             except FileNotFoundError:
                 message = ""
+            try:
+                stage = str(winreg.QueryValueEx(key, "LastUpdateStage")[0]).strip().lower()
+            except FileNotFoundError:
+                stage = ""
     except (FileNotFoundError, OSError):
         return None
     if state not in {"installing", "success", "failed"}:
         return None
-    return InstallerStatus(state=state, version=version, message=message)
+    return InstallerStatus(state=state, version=version, message=message, stage=stage)
 
 
 def _parse_version(value: str) -> tuple[int, int, int]:
@@ -240,3 +247,35 @@ def launch_installer(installer: Path) -> None:
     )
     if result <= 32:
         raise UpdateError(f"Unable to start elevated installer (Windows error {result})")
+
+
+def launch_updater(
+    updater: Path,
+    installer: Path,
+    target_version: str,
+) -> Path:
+    if os.name != "nt":
+        raise UpdateError("Automatic installation is only supported on Windows")
+    if not updater.is_file():
+        raise UpdateError(f"Updater not found: {updater}")
+    if not installer.is_file():
+        raise UpdateError(f"Installer not found: {installer}")
+    normalized_version = ".".join(str(part) for part in _parse_version(target_version))
+    destination = installer.parent / f"radar-scanner-updater-{normalized_version}.exe"
+    try:
+        if updater.resolve() != destination.resolve():
+            shutil.copy2(updater, destination)
+        subprocess.Popen(
+            [
+                str(destination),
+                "--installer",
+                str(installer),
+                "--version",
+                normalized_version,
+            ],
+            cwd=str(installer.parent),
+            close_fds=True,
+        )
+    except OSError as exc:
+        raise UpdateError(f"Unable to start update progress window: {exc}") from exc
+    return destination

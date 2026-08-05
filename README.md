@@ -34,6 +34,8 @@ khởi tạo toàn bộ kết nối tới các dịch vụ từ xa.
 - **Scanner Agent**: worker chạy nền, gửi heartbeat độc lập, nhận job, gia hạn lease, chạy quét
   và gửi kết quả.
 - **Scanner Manager**: ứng dụng desktop Windows để cấu hình, quản lý service, chẩn đoán và xem log.
+- **Scanner Updater**: tiến trình desktop độc lập hiển thị các mốc nâng cấp trong lúc Manager đóng
+  và Setup thay thế file ứng dụng.
 - **SQLite outbox**: hàng đợi bền vững cục bộ dành cho kết quả chưa gửi được. PostgreSQL của RADAR
   vẫn là nguồn dữ liệu chính thức.
 - **Windows Service wrapper**: WinSW chạy Agent dưới tài khoản `LocalSystem`, tự động khởi động

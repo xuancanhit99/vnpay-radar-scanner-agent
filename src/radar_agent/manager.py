@@ -38,6 +38,7 @@ from radar_agent.update_service import (
     check_for_update,
     download_installer,
     launch_installer,
+    launch_updater,
     read_installer_status,
 )
 
@@ -592,7 +593,10 @@ class ManagerWindow(tk.Tk):
                 error = str(exc)
                 self.after(0, lambda message=error: self._update_download_failed(message))
             else:
-                self.after(0, lambda: self._launch_downloaded_update(installer))
+                self.after(
+                    0,
+                    lambda: self._launch_downloaded_update(installer, update.latest_version),
+                )
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -604,17 +608,21 @@ class ManagerWindow(tk.Tk):
         self.update_status_label.configure(style="Error.TLabel")
         messagebox.showerror("Software update", error, parent=self)
 
-    def _launch_downloaded_update(self, installer: Path) -> None:
+    def _launch_downloaded_update(self, installer: Path, target_version: str) -> None:
         try:
             if self._direct_process is not None and self._direct_process.poll() is None:
                 self.stop_direct()
-            self.update_status.set("Waiting for Administrator approval...")
+            self.update_status.set("Starting update progress window...")
             self.update_idletasks()
-            launch_installer(installer)
+            updater = self._package_root / "radar-scanner-updater.exe"
+            if updater.is_file():
+                launch_updater(updater, installer, target_version)
+            else:
+                launch_installer(installer)
         except Exception as exc:
             self._update_download_failed(str(exc))
             return
-        self.update_status.set("Installer started. Manager will close automatically...")
+        self.update_status.set("Updater started. Manager will close during installation...")
 
     def _run_operation(self, operation, *, title: str, success_message: str) -> None:
         if self._operation_running:

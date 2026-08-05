@@ -13,6 +13,7 @@ from radar_agent.update_service import (
     check_for_update,
     download_installer,
     launch_installer,
+    launch_updater,
     read_installer_status,
 )
 
@@ -173,6 +174,7 @@ def test_read_installer_status_from_windows_registry(monkeypatch) -> None:
         "LastUpdateState": "failed",
         "LastUpdateVersion": "0.5.6",
         "LastUpdateMessage": "Service could not be restarted.",
+        "LastUpdateStage": "starting_service",
     }
     fake_winreg = type(
         "FakeWinreg",
@@ -192,6 +194,86 @@ def test_read_installer_status_from_windows_registry(monkeypatch) -> None:
     assert status.state == "failed"
     assert status.version == "0.5.6"
     assert status.message == "Service could not be restarted."
+    assert status.stage == "starting_service"
+
+
+def test_read_installer_status_supports_older_installer_without_stage(monkeypatch) -> None:
+    values = {
+        "LastUpdateState": "success",
+        "LastUpdateVersion": "0.5.7",
+        "LastUpdateMessage": "Installation completed successfully.",
+    }
+
+    def query_value(_key, name):
+        if name not in values:
+            raise FileNotFoundError(name)
+        return values[name], 1
+
+    fake_winreg = type(
+        "FakeWinreg",
+        (),
+        {
+            "HKEY_LOCAL_MACHINE": object(),
+            "OpenKey": staticmethod(lambda *_args: nullcontext(object())),
+            "QueryValueEx": staticmethod(query_value),
+        },
+    )
+    monkeypatch.setattr(update_service.os, "name", "nt")
+    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
+
+    status = read_installer_status()
+
+    assert status is not None
+    assert status.stage == ""
+
+
+def test_launch_updater_copies_executable_next_to_downloaded_installer(
+    tmp_path, monkeypatch
+) -> None:
+    source_directory = tmp_path / "installed"
+    download_directory = tmp_path / "updates"
+    source_directory.mkdir()
+    download_directory.mkdir()
+    updater = source_directory / "radar-scanner-updater.exe"
+    updater.write_bytes(b"updater")
+    installer = download_directory / "setup.exe"
+    installer.write_bytes(b"installer")
+    calls = []
+
+    def fake_popen(arguments, **kwargs):
+        calls.append((arguments, kwargs))
+        return object()
+
+    monkeypatch.setattr(update_service.os, "name", "nt")
+    monkeypatch.setattr(update_service.subprocess, "Popen", fake_popen)
+
+    launched = launch_updater(updater, installer, "0.5.8")
+
+    assert launched == download_directory / "radar-scanner-updater-0.5.8.exe"
+    assert launched.read_bytes() == b"updater"
+    assert calls == [
+        (
+            [
+                str(launched),
+                "--installer",
+                str(installer),
+                "--version",
+                "0.5.8",
+            ],
+            {"cwd": str(download_directory), "close_fds": True},
+        )
+    ]
+
+
+def test_launch_updater_rejects_invalid_target_version(tmp_path, monkeypatch) -> None:
+    updater = tmp_path / "updater.exe"
+    installer = tmp_path / "setup.exe"
+    updater.write_bytes(b"updater")
+    installer.write_bytes(b"installer")
+    monkeypatch.setattr(update_service.os, "name", "nt")
+
+    with pytest.raises(UpdateError, match="Unsupported release version"):
+        launch_updater(updater, installer, "latest")
 
 
 def test_manager_shows_failed_installer_status() -> None:

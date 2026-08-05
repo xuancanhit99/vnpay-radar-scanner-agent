@@ -32,6 +32,7 @@ vnpay-radar-scanner-agent/
 |   |-- build.ps1
 |   |-- verify-release.ps1
 |   |-- installer.nsi
+|   |-- radar-scanner-updater.spec
 |   |-- install-service.ps1
 |   `-- uninstall-service.ps1
 |-- tests/
@@ -151,7 +152,8 @@ Quy trình build thực hiện:
 1. Đồng bộ dependency.
 2. Chạy Pytest và Ruff.
 3. Build Worker dạng PyInstaller `onedir`.
-4. Build file thực thi Manager bằng PyInstaller với manifest yêu cầu quyền UAC Administrator.
+4. Build file thực thi Manager và Updater bằng PyInstaller với manifest yêu cầu quyền UAC
+   Administrator.
 5. Tải WinSW và kiểm tra checksum SHA-256 đã ghim.
 6. Tạo file ZIP portable.
 7. Biên dịch bộ Setup bằng NSIS.
@@ -168,8 +170,8 @@ packaging/output/
 ```
 
 Mỗi lần build sẽ xóa các artifact Agent phiên bản cũ trong `packaging/output/` để tránh chọn
-nhầm file khi phát hành. Worker, Manager và Setup đều được gắn version metadata của ứng dụng;
-WinSW service wrapper giữ version riêng của WinSW.
+nhầm file khi phát hành. Worker, Manager, Updater và Setup đều được gắn version metadata của ứng
+dụng; WinSW service wrapper giữ version riêng của WinSW.
 
 Các tùy chọn build hữu ích:
 

@@ -3,13 +3,14 @@ RequestExecutionLevel admin
 ManifestDPIAware true
 
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
 !ifndef APP_VERSION
-  !define APP_VERSION "0.5.7"
+  !define APP_VERSION "0.5.8"
 !endif
 !ifndef APP_FILE_VERSION
-  !define APP_FILE_VERSION "0.5.7.0"
+  !define APP_FILE_VERSION "0.5.8.0"
 !endif
 !ifndef SOURCE_DIR
   !error "SOURCE_DIR is required"
@@ -53,19 +54,50 @@ SetCompressor /SOLID lzma
 
 !insertmacro MUI_LANGUAGE "English"
 
+Function .onInit
+  IfSilent 0 installer_init_done
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "/UPDATER_CHILD" $R1
+  IfErrors bootstrap_updater installer_init_done
+
+bootstrap_updater:
+  SetShellVarContext all
+  CreateDirectory "$APPDATA\VNPAY\RadarScannerAgent\updates"
+  SetOutPath "$APPDATA\VNPAY\RadarScannerAgent\updates"
+  File /oname=radar-scanner-updater-${APP_VERSION}.exe "${SOURCE_DIR}\radar-scanner-updater.exe"
+  ClearErrors
+  Exec '"$APPDATA\VNPAY\RadarScannerAgent\updates\radar-scanner-updater-${APP_VERSION}.exe" --installer "$EXEPATH" --version "${APP_VERSION}"'
+  IfErrors updater_bootstrap_failed updater_bootstrap_done
+
+updater_bootstrap_failed:
+  SetRegView 64
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "failed"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "failed"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" "Could not start the update progress window."
+
+updater_bootstrap_done:
+  Quit
+
+installer_init_done:
+FunctionEnd
+
 Section "RADAR Scanner Agent" SEC_MAIN
   SetShellVarContext all
   SetRegView 64
   StrCpy $R7 "Setup did not complete."
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "installing"
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "preparing"
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" ""
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "closing_manager"
   ; Do not use /T here: Setup is launched by Manager and is therefore its child process.
   nsExec::ExecToStack 'taskkill.exe /IM "radar-scanner-manager.exe" /F'
   Pop $0
   Pop $1
   Sleep 1000
 
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "checking_service"
   StrCpy $R9 "0"
   nsExec::ExecToStack 'sc.exe query "${SERVICE_NAME}"'
   Pop $0
@@ -74,6 +106,7 @@ Section "RADAR Scanner Agent" SEC_MAIN
     IfFileExists "$INSTDIR\${SERVICE_NAME}.xml" existing_service_ready stale_service_registration
 
 stale_service_registration:
+    WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "stopping_service"
     nsExec::ExecToStack 'sc.exe stop "${SERVICE_NAME}"'
     Pop $0
     Pop $1
@@ -103,6 +136,7 @@ stale_service_wait:
 
 existing_service_ready:
     StrCpy $R9 "1"
+    WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "stopping_service"
     nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -Command "Stop-Service -Name ${SERVICE_NAME} -Force -ErrorAction Stop; (Get-Service -Name ${SERVICE_NAME}).WaitForStatus([ServiceProcess.ServiceControllerStatus]::Stopped, [TimeSpan]::FromSeconds(30))"'
     Pop $0
     ${If} $0 != 0
@@ -113,6 +147,7 @@ existing_service_ready:
 
 service_precheck_complete:
 
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "installing_files"
   SetRegView 32
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\VNPAYRadarScannerAgent"
   SetRegView 64
@@ -133,6 +168,7 @@ service_precheck_complete:
   CreateShortcut "$SMPROGRAMS\VNPAY\RADAR Scanner Manager.lnk" "$INSTDIR\radar-scanner-manager.exe"
   CreateShortcut "$DESKTOP\RADAR Scanner Manager.lnk" "$INSTDIR\radar-scanner-manager.exe"
 
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "starting_service"
   ${If} $R9 == "1"
     nsExec::ExecToLog 'powershell.exe -NoProfile -NonInteractive -Command "Start-Service -Name ${SERVICE_NAME} -ErrorAction Stop; (Get-Service -Name ${SERVICE_NAME}).WaitForStatus([ServiceProcess.ServiceControllerStatus]::Running, [TimeSpan]::FromSeconds(30))"'
     Pop $0
@@ -142,8 +178,20 @@ service_precheck_complete:
     ${EndIf}
   ${EndIf}
 
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "verifying"
+  IfFileExists "$INSTDIR\radar-scanner-manager.exe" +3 0
+    StrCpy $R7 "Scanner Manager executable is missing after installation."
+    Abort "$R7"
+  IfFileExists "$INSTDIR\radar-scanner-updater.exe" +3 0
+    StrCpy $R7 "Scanner Updater executable is missing after installation."
+    Abort "$R7"
+  IfFileExists "$INSTDIR\agent\radar-scanner-agent.exe" +3 0
+    StrCpy $R7 "Scanner Agent executable is missing after installation."
+    Abort "$R7"
+
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateState" "success"
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateVersion" "${APP_VERSION}"
+  WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateStage" "completed"
   WriteRegStr HKLM "Software\VNPAY\RadarScannerAgent" "LastUpdateMessage" "Installation completed successfully."
   IfSilent silent_update_relaunch interactive_install_finish
 silent_update_relaunch:

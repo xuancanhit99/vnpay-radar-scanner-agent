@@ -298,7 +298,7 @@ wheels = [
 
 [[package]]
 name = "radar-scanner-agent"
-version = "0.5.7"
+version = "0.5.8"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },

@@ -61,6 +61,7 @@ theo máy. Để trống trường Client secret sẽ giữ nguyên secret hiệ
 | Thư mục chương trình | `C:\Program Files\VNPAY\Radar Scanner Agent` |
 | File thực thi Worker | `C:\Program Files\VNPAY\Radar Scanner Agent\agent\radar-scanner-agent.exe` |
 | File thực thi Manager | `C:\Program Files\VNPAY\Radar Scanner Agent\radar-scanner-manager.exe` |
+| File thực thi Updater | `C:\Program Files\VNPAY\Radar Scanner Agent\radar-scanner-updater.exe` |
 | Cấu hình | `C:\ProgramData\VNPAY\RadarScannerAgent\.env` |
 | DPAPI secret | `C:\ProgramData\VNPAY\RadarScannerAgent\client-secret.dpapi` |
 | SQLite outbox | `C:\ProgramData\VNPAY\RadarScannerAgent\agent.db` |
@@ -93,10 +94,11 @@ Quá trình khởi động khỏe mạnh có request thành công tới:
 ## Nâng cấp
 
 Từ phiên bản `0.4.0`, tab **Overview** tự kiểm tra GitHub Releases khi Manager khởi động. Khi
-có bản mới, chọn **Update now**, xác nhận nâng cấp và chờ Manager tải, kiểm tra SHA-256 rồi chạy
-Setup. Xác nhận hộp thoại UAC để cấp quyền Administrator. Manager sẽ đóng trong lúc thay file và
-tự mở lại bằng phiên bản mới sau khi Setup hoàn tất. Riêng bản `0.5.0` cần mở lại Manager thủ công
-sau khi nâng cấp; hành vi tự mở lại áp dụng từ `0.5.1`.
+có bản mới, chọn **Update now**, xác nhận nâng cấp và chờ Manager tải, kiểm tra SHA-256. Từ bản
+`0.5.8`, cửa sổ Updater độc lập hiển thị từng mốc cài đặt trong khi Manager đóng để thay file.
+Không tắt máy hoặc kết thúc Updater ở giai đoạn này. Manager tự mở lại bằng phiên bản mới sau khi
+Setup hoàn tất. Riêng bản `0.5.0` cần mở lại Manager thủ công sau khi nâng cấp; hành vi tự mở lại
+áp dụng từ `0.5.1`.
 
 Máy đang dùng phiên bản cũ hơn `0.4.0` cần cài Setup `0.4.0` thủ công một lần. Có thể tiếp tục
 nâng cấp thủ công bằng cách chạy file Setup phiên bản mới hơn với quyền Administrator.

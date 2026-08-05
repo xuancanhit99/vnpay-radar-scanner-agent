@@ -55,7 +55,8 @@ try {
         "VERSION",
         "VNPAYRadarScannerAgent.exe",
         "agent/radar-scanner-agent.exe",
-        "radar-scanner-manager.exe"
+        "radar-scanner-manager.exe",
+        "radar-scanner-updater.exe"
     )
     foreach ($entry in $requiredEntries) {
         Assert-Condition ($entry -in $entryNames) "Portable package is missing $entry"
@@ -88,6 +89,7 @@ try {
     $versionedFiles = @(
         (Join-Path $temporaryDirectory "agent\radar-scanner-agent.exe"),
         (Join-Path $temporaryDirectory "radar-scanner-manager.exe"),
+        (Join-Path $temporaryDirectory "radar-scanner-updater.exe"),
         $setupPath
     )
     foreach ($file in $versionedFiles) {

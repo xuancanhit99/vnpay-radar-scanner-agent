@@ -49,13 +49,14 @@ def test_silent_installer_records_result_and_reopens_manager_on_failure() -> Non
     assert "Exec '\"$INSTDIR\\radar-scanner-manager.exe\"'" in script
 
 
-def test_manager_waits_for_installer_to_close_it() -> None:
+def test_manager_hands_download_to_progress_updater() -> None:
     manager_script = (
         Path(__file__).parents[1] / "src" / "radar_agent" / "manager.py"
     ).read_text(encoding="utf-8")
     method = manager_script.split("def _launch_downloaded_update", maxsplit=1)[1]
     method = method.split("\n    def ", maxsplit=1)[0]
 
+    assert "launch_updater(updater, installer" in method
     assert "launch_installer(installer)" in method
     assert "self.destroy" not in method
 
@@ -75,3 +76,38 @@ def test_manager_uses_reinstall_service_label() -> None:
 
     assert 'text="Install / Reinstall"' in manager_script
     assert "Install / upgrade" not in manager_script
+
+
+def test_silent_setup_bootstraps_progress_updater_for_older_manager() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'IfErrors bootstrap_updater installer_init_done' in script
+    assert 'File /oname=radar-scanner-updater-${APP_VERSION}.exe' in script
+    assert '$APPDATA\\VNPAY\\RadarScannerAgent\\updates' in script
+    assert "$COMMONAPPDATA" not in script
+    assert '--installer "$EXEPATH" --version "${APP_VERSION}"' in script
+    assert '"/UPDATER_CHILD"' in script
+
+
+def test_installer_reports_real_progress_stages() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    for stage in (
+        "preparing",
+        "closing_manager",
+        "checking_service",
+        "stopping_service",
+        "installing_files",
+        "starting_service",
+        "verifying",
+        "completed",
+    ):
+        assert f'"LastUpdateStage" "{stage}"' in script
+
+
+def test_installer_verifies_all_application_executables() -> None:
+    script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'IfFileExists "$INSTDIR\\radar-scanner-manager.exe"' in script
+    assert 'IfFileExists "$INSTDIR\\radar-scanner-updater.exe"' in script
+    assert 'IfFileExists "$INSTDIR\\agent\\radar-scanner-agent.exe"' in script
