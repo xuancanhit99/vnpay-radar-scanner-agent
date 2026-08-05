@@ -1,4 +1,5 @@
 import asyncio
+import math
 import os
 import subprocess
 import sys
@@ -8,8 +9,18 @@ from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import ValidationError
-from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QBrush, QCloseEvent, QColor, QDesktopServices, QTextCursor
+from PySide6.QtCore import QObject, QRectF, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import (
+    QBrush,
+    QCloseEvent,
+    QColor,
+    QDesktopServices,
+    QIcon,
+    QPainter,
+    QPen,
+    QPixmap,
+    QTextCursor,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
@@ -85,6 +96,27 @@ _DIAGNOSTIC_STEPS = (
     ("device", "Android device"),
     ("radar", "RADAR backend"),
 )
+
+
+def _diagnostic_spinner_icon(frame: int, size: int = 18) -> QIcon:
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+    circle = QRectF(3, 3, size - 6, size - 6)
+    base_pen = QPen(QColor(255, 255, 255, 75), 2)
+    base_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    painter.setPen(base_pen)
+    painter.drawEllipse(circle)
+
+    active_pen = QPen(QColor(255, 255, 255), 2)
+    active_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    painter.setPen(active_pen)
+    start_angle = -int((frame % 12) * (2 * math.pi / 12) * 180 / math.pi * 16)
+    painter.drawArc(circle, start_angle, -110 * 16)
+    painter.end()
+    return QIcon(pixmap)
 
 
 class ManagerEvents(QObject):
@@ -547,10 +579,15 @@ class ManagerWindow(QMainWindow):
         toolbar = QHBoxLayout()
         self.diagnostic_button = QPushButton("Run checks")
         self.diagnostic_button.setObjectName("PrimaryButton")
-        self.diagnostic_button.setIcon(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+        self._diagnostic_idle_icon = self.style().standardIcon(
+            QStyle.StandardPixmap.SP_DialogApplyButton
         )
+        self.diagnostic_button.setIcon(self._diagnostic_idle_icon)
         self.diagnostic_button.clicked.connect(self.run_checks)
+        self._diagnostic_spinner_frame = 0
+        self._diagnostic_spinner_timer = QTimer(self)
+        self._diagnostic_spinner_timer.setInterval(80)
+        self._diagnostic_spinner_timer.timeout.connect(self._advance_diagnostic_spinner)
         self.diagnostic_summary_label = QLabel("Not run")
         self.diagnostic_summary_label.setObjectName("MutedLabel")
         toolbar.addWidget(self.diagnostic_button)
@@ -1091,6 +1128,7 @@ class ManagerWindow(QMainWindow):
         self._diagnostic_results.clear()
         self._diagnostic_rows.clear()
         self.diagnostic_button.setEnabled(False)
+        self._set_diagnostics_running_visual(True)
         self.install_update_button.setEnabled(False)
         self.diagnostic_summary_label.setText(f"Running 0/{len(_DIAGNOSTIC_STEPS)} checks")
         self._set_label_tone(self.diagnostic_summary_label, "busy")
@@ -1170,6 +1208,7 @@ class ManagerWindow(QMainWindow):
 
     def _diagnostics_finished(self, results: list[DiagnosticResult]) -> None:
         self._diagnostics_running = False
+        self._set_diagnostics_running_visual(False)
         passed = sum(result.success for result in results)
         self.diagnostic_summary_label.setText(f"{passed}/{len(results)} checks passed")
         self._set_label_tone(
@@ -1182,12 +1221,28 @@ class ManagerWindow(QMainWindow):
 
     def _diagnostics_failed(self, error: str) -> None:
         self._diagnostics_running = False
+        self._set_diagnostics_running_visual(False)
         self.diagnostic_summary_label.setText("Diagnostics failed")
         self._set_label_tone(self.diagnostic_summary_label, "error")
         if not self._interaction_locked:
             self.diagnostic_button.setEnabled(True)
             self.install_update_button.setEnabled(self._available_update is not None)
         QMessageBox.critical(self, "Diagnostics", error)
+
+    def _set_diagnostics_running_visual(self, running: bool) -> None:
+        if running:
+            self._diagnostic_spinner_frame = 0
+            self.diagnostic_button.setText("Running checks")
+            self.diagnostic_button.setIcon(_diagnostic_spinner_icon(0))
+            self._diagnostic_spinner_timer.start()
+            return
+        self._diagnostic_spinner_timer.stop()
+        self.diagnostic_button.setText("Run checks")
+        self.diagnostic_button.setIcon(self._diagnostic_idle_icon)
+
+    def _advance_diagnostic_spinner(self) -> None:
+        self._diagnostic_spinner_frame = (self._diagnostic_spinner_frame + 1) % 12
+        self.diagnostic_button.setIcon(_diagnostic_spinner_icon(self._diagnostic_spinner_frame))
 
     def _set_log_text(self, content: str) -> None:
         self.log_output.setPlainText(content)

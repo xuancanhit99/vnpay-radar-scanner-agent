@@ -35,6 +35,8 @@ private khi chưa thay update channel bằng endpoint phân phối nội bộ c�
 
 ## Bootstrap và rollback
 
+- Bản `0.7.2` bổ sung spinner động cho Diagnostics, đồng bộ giao diện scrollbar ngang với
+  scrollbar dọc và dùng checkbox indicator rõ ràng, nhất quán trong Manager/Updater.
 - Bản `0.7.1` chỉ hiển thị **Update now** khi có bản mới, thay spinbox native bằng stepper
   `- / +`, kiểm tra RADAR qua endpoint health có xác thực mà không chờ Android, và giữ log ở
   cuối danh sách nhưng luôn căn ngang về đầu dòng.

@@ -1,7 +1,8 @@
 from io import BytesIO
 
-from PySide6.QtGui import QFont, QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleOption, QWidget
 
 from radar_agent.desktop_shell import create_radar_icon
 
@@ -20,6 +21,82 @@ AMBER = "#B76E00"
 AMBER_TINT = "#FFF7E6"
 GREEN = "#087A55"
 GREEN_TINT = "#EAF7F2"
+
+
+class RadarProxyStyle(QProxyStyle):
+    def pixelMetric(
+        self,
+        metric: QStyle.PixelMetric,
+        option: QStyleOption | None = None,
+        widget: QWidget | None = None,
+    ) -> int:
+        if metric in {
+            QStyle.PixelMetric.PM_IndicatorWidth,
+            QStyle.PixelMetric.PM_IndicatorHeight,
+        }:
+            return 18
+        return super().pixelMetric(metric, option, widget)
+
+    def drawPrimitive(
+        self,
+        element: QStyle.PrimitiveElement,
+        option: QStyleOption,
+        painter: QPainter,
+        widget: QWidget | None = None,
+    ) -> None:
+        if element != QStyle.PrimitiveElement.PE_IndicatorCheckBox:
+            super().drawPrimitive(element, option, painter, widget)
+            return
+
+        state = option.state
+        enabled = bool(state & QStyle.StateFlag.State_Enabled)
+        checked = bool(state & QStyle.StateFlag.State_On)
+        partial = bool(state & QStyle.StateFlag.State_NoChange)
+        hovered = bool(state & QStyle.StateFlag.State_MouseOver)
+        focused = bool(state & QStyle.StateFlag.State_HasFocus)
+
+        if checked or partial:
+            fill = QColor(BLUE_BRIGHT if hovered and enabled else BLUE)
+            if not enabled:
+                fill = QColor("#9CB7CC")
+            border = fill
+        else:
+            fill = QColor(BLUE_TINT if hovered and enabled else SURFACE)
+            border = QColor(BLUE_BRIGHT if focused or hovered else "#AEBBC6")
+            if not enabled:
+                fill = QColor("#F3F5F7")
+                border = QColor(BORDER)
+
+        rect = option.rect.adjusted(1, 1, -1, -1)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(QPen(border, 1))
+        painter.setBrush(fill)
+        painter.drawRoundedRect(rect, 4, 4)
+
+        if checked:
+            path = QPainterPath()
+            path.moveTo(rect.left() + 3.5, rect.center().y())
+            path.lineTo(rect.center().x() - 0.5, rect.bottom() - 3.5)
+            path.lineTo(rect.right() - 3, rect.top() + 3.5)
+            check_pen = QPen(QColor("#FFFFFF"), 2)
+            check_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            check_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(check_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(path)
+        elif partial:
+            partial_pen = QPen(QColor("#FFFFFF"), 2)
+            partial_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(partial_pen)
+            painter.drawLine(
+                rect.left() + 4,
+                rect.center().y(),
+                rect.right() - 4,
+                rect.center().y(),
+            )
+        painter.restore()
+
 
 RADAR_STYLESHEET = f"""
 QWidget {{
@@ -152,8 +229,7 @@ QToolButton#StepperButton {{
 }}
 QToolButton#StepperButton:hover {{ color: {BLUE}; background: {BLUE_TINT}; }}
 QToolButton#StepperButton:pressed {{ background: #DCECF7; }}
-QCheckBox {{ spacing: 8px; }}
-QCheckBox::indicator {{ width: 17px; height: 17px; }}
+QCheckBox {{ spacing: 9px; }}
 QProgressBar {{
     min-height: 7px;
     max-height: 7px;
@@ -194,6 +270,13 @@ QScrollBar:vertical {{ width: 12px; background: transparent; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: #C8D2DB; min-height: 28px; border-radius: 4px; }}
 QScrollBar::handle:vertical:hover {{ background: #AEBBC6; }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar:horizontal {{ height: 12px; background: transparent; margin: 2px; }}
+QScrollBar::handle:horizontal {{ background: #C8D2DB; min-width: 28px; border-radius: 4px; }}
+QScrollBar::handle:horizontal:hover {{ background: #AEBBC6; }}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal,
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: transparent; }}
+QScrollBar::corner {{ background: transparent; }}
 QMenu {{ background: {SURFACE}; border: 1px solid {BORDER}; padding: 5px; }}
 QMenu::item {{ padding: 7px 24px 7px 10px; border-radius: 4px; }}
 QMenu::item:selected {{ color: {BLUE}; background: {BLUE_TINT}; }}
@@ -214,7 +297,7 @@ def apply_window_icon(window: QWidget) -> None:
 
 
 def configure_radar_theme(application: QApplication) -> None:
-    application.setStyle("Fusion")
+    application.setStyle(RadarProxyStyle("Fusion"))
     application.setFont(QFont("Segoe UI Variable Text", 10))
     application.setStyleSheet(RADAR_STYLESHEET)
     application.setWindowIcon(radar_icon())

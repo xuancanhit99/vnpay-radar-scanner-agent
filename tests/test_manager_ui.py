@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QCheckBox
 
 from radar_agent.desktop_theme import configure_radar_theme
 from radar_agent.manager import ManagerWindow
@@ -63,10 +63,10 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     application = _application()
     window = ManagerWindow(start_background_tasks=False)
 
-    current = UpdateInfo("0.7.1", "0.7.1", False, "", "", "", "")
+    current = UpdateInfo("0.7.2", "0.7.2", False, "", "", "", "")
     available = UpdateInfo(
-        "0.7.1",
         "0.7.2",
+        "0.7.3",
         True,
         "https://github.com/example/release",
         "setup.exe",
@@ -85,6 +85,54 @@ def test_update_button_only_appears_when_update_is_available(tmp_path, monkeypat
     finally:
         window._exiting = True
         window.close()
+
+
+def test_diagnostics_button_uses_animated_running_state(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RADAR_AGENT_MANAGER_CONFIG", str(tmp_path / ".env"))
+    application = _application()
+    window = ManagerWindow(start_background_tasks=False)
+
+    try:
+        window._set_diagnostics_running_visual(True)
+        first_frame = window.diagnostic_button.icon().cacheKey()
+        window._advance_diagnostic_spinner()
+
+        assert window.diagnostic_button.text() == "Running checks"
+        assert window._diagnostic_spinner_timer.isActive()
+        assert window.diagnostic_button.icon().cacheKey() != first_frame
+
+        window._set_diagnostics_running_visual(False)
+        assert window.diagnostic_button.text() == "Run checks"
+        assert not window._diagnostic_spinner_timer.isActive()
+        application.processEvents()
+    finally:
+        window._exiting = True
+        window.close()
+
+
+def test_checked_checkbox_uses_high_contrast_indicator() -> None:
+    application = _application()
+    checkbox = QCheckBox()
+    checkbox.setChecked(True)
+    checkbox.resize(24, 24)
+    checkbox.show()
+    application.processEvents()
+
+    image = checkbox.grab().toImage()
+    blue_pixels = 0
+    white_pixels = 0
+    for x in range(min(20, image.width())):
+        for y in range(image.height()):
+            color = image.pixelColor(x, y)
+            if color.blue() > 120 and color.green() > 50 and color.red() < 40:
+                blue_pixels += 1
+            if color.red() > 250 and color.green() > 250 and color.blue() > 250:
+                white_pixels += 1
+
+    assert blue_pixels > 80
+    assert white_pixels > 3
+    assert "QScrollBar:horizontal" in application.styleSheet()
+    checkbox.close()
 
 
 def test_numeric_stepper_and_log_autoscroll(tmp_path, monkeypatch) -> None:
