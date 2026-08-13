@@ -27,7 +27,6 @@ qua biến môi trường của tiến trình.
 | `RADAR_AGENT_DAST_DISPLAY_NAME` | Khi bật DAST | `<display-name> DAST` | Tên hiển thị của DAST worker. |
 | `RADAR_AGENT_DAST_ENGINE_URL` | Khi bật DAST | `http://127.0.0.1:8010` | DAST Engine local, không expose ra mạng. |
 | `RADAR_AGENT_DAST_ENGINE_API_KEY_FILE` | Khi bật DAST | DPAPI file | API key engine được mã hoá theo machine scope. |
-| `RADAR_AGENT_DAST_PRINCIPALS_FILE` | Khi bật DAST | DPAPI file | JSON principal secret theo project, được mã hoá bằng DPAPI. |
 | `RADAR_AGENT_DAST_TIMEOUT_SECONDS` | Không | `2700` | Trần thời gian một DAST scan. |
 | `RADAR_AGENT_TOKEN_URL` | Có | Token endpoint của VNPAY-TEST | OIDC token endpoint đầy đủ của realm Keycloak mục tiêu. |
 | `RADAR_AGENT_CLIENT_ID` | Có | `vnpay-radar-agent` | Client ID confidential có service account. |
@@ -60,7 +59,6 @@ RADAR_AGENT_DAST_AGENT_ID=windows-mobile-lab-01-dast
 RADAR_AGENT_DAST_DISPLAY_NAME=Mobile Security Lab 01 DAST
 RADAR_AGENT_DAST_ENGINE_URL=http://127.0.0.1:8010
 RADAR_AGENT_DAST_ENGINE_API_KEY_FILE=
-RADAR_AGENT_DAST_PRINCIPALS_FILE=
 RADAR_AGENT_TOKEN_URL=https://sso.example.vn/realms/REALM/protocol/openid-connect/token
 RADAR_AGENT_CLIENT_ID=vnpay-radar-agent
 RADAR_AGENT_CLIENT_SECRET=
@@ -76,23 +74,15 @@ RADAR_AGENT_RETRY_DELAY_SECONDS=5
 
 Không đưa secret thật vào tài liệu, ảnh chụp màn hình, file mẫu hoặc source control.
 
-Khi dùng Manager, người vận hành nhập Engine API key và Protected principals JSON rồi chọn
-**Install / Reinstall**. Manager mã hóa hai giá trị bằng Windows DPAPI và tự điền đường dẫn file;
-không tự nhập giá trị rõ vào các biến `*_FILE`.
+Khi dùng Manager, người vận hành chỉ nhập Engine API key rồi chọn **Install / Reinstall**.
+Manager mã hóa API key bằng Windows DPAPI và tự điền đường dẫn file. Token hoặc tài khoản kiểm
+thử DAST được Admin/PIC cấu hình tập trung trên RADAR theo từng project; Scanner Manager không
+lưu hoặc quản lý các credential này.
 
-Principal secret nhập trong Scanner Manager có cấu trúc sau và không được ghi dạng rõ vào
-`.env`:
-
-```json
-{
-  "projects": {
-    "<radar-project-uuid>": {
-      "admin_user": {"token": "..."},
-      "low_user": {"token": "..."}
-    }
-  }
-}
-```
+Sau khi đã deploy RADAR migration và xác nhận Agent `0.9.0` chạy DAST bình thường, có thể xóa
+biến legacy `RADAR_AGENT_DAST_PRINCIPALS_FILE` khỏi `.env` và xóa file
+`dast-principals.dpapi` cũ. Agent `0.9.0` bỏ qua cả hai giá trị này; không xóa trước khi hoàn tất
+rollout Backend để vẫn có đường quay lại Agent `0.8.x` khi cần.
 
 ## Lưu trữ secret
 

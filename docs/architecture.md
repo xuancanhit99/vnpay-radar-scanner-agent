@@ -64,8 +64,9 @@ Không mở cổng APK Scanner `8000` hoặc cổng ADB `5037` ra Internet.
 Không mở cổng DAST Engine `8010` ra mạng; chỉ Scanner Agent được gọi qua loopback.
 
 Khi bật DAST, một Windows Service chạy hai logical agent có ID riêng. Worker APK và DAST gửi
-heartbeat/claim độc lập nhưng dùng chung VNPAY SSO service account. Secret của engine và
-principal kiểm thử được mã hoá bằng DPAPI; RADAR chỉ lưu tên principal và placeholder.
+heartbeat/claim độc lập nhưng dùng chung VNPAY SSO service account. API key của engine được mã
+hóa bằng DPAPI. Principal credential được RADAR lưu mã hóa theo project và chỉ cấp trong config
+sau khi xác minh lease của đúng DAST job.
 
 ## Vòng đời job
 
@@ -87,8 +88,7 @@ sequenceDiagram
         alt APK job
             Agent->>Local: POST APK /scan
         else DAST job
-            Agent->>API: GET config + collection bằng lease
-            Agent->>Agent: Ghép principal secret từ DPAPI
+            Agent->>API: GET config đã ghép credential + collection bằng lease
             Agent->>Local: PUT config + collection, POST scan
             Agent->>DB: Lưu engine_scan_id checkpoint
             loop Cho tới khi DAST hoàn tất

@@ -589,18 +589,9 @@ class ManagerWindow(QMainWindow):
         ):
             dast_form.addRow(self._field_label(label), widget)
         dast_layout.addLayout(dast_form)
-        dast_principals_label = QLabel("Protected principals JSON")
-        dast_principals_label.setObjectName("FieldLabel")
-        dast_layout.addWidget(dast_principals_label)
-        self.dast_principals = QPlainTextEdit()
-        self.dast_principals.setPlaceholderText(
-            '{"projects":{"<project-uuid>":{"admin_user":{"token":"..."}}}}\n'
-            "Leave blank to keep the protected value."
-        )
-        self.dast_principals.setMaximumHeight(120)
-        dast_layout.addWidget(self.dast_principals)
         dast_note = QLabel(
-            "The engine API key and principal credentials are encrypted with Windows DPAPI."
+            "The engine API key is encrypted with Windows DPAPI. "
+            "DAST test credentials are managed centrally in RADAR."
         )
         dast_note.setObjectName("MutedLabel")
         dast_layout.addWidget(dast_note)
@@ -741,7 +732,6 @@ class ManagerWindow(QMainWindow):
         self.dast_display_name.setText(settings.dast_display_name)
         self.dast_engine_url.setText(settings.dast_engine_url)
         self.dast_engine_api_key.clear()
-        self.dast_principals.clear()
         self.token_url.setText(settings.token_url)
         self.client_id.setText(settings.client_id)
         self.client_secret.clear()
@@ -766,7 +756,6 @@ class ManagerWindow(QMainWindow):
             dast_engine_url=self.dast_engine_url.text().strip(),
             dast_engine_api_key=self.dast_engine_api_key.text(),
             dast_engine_api_key_file=self._settings.dast_engine_api_key_file,
-            dast_principals_file=self._settings.dast_principals_file,
             dast_poll_interval_seconds=self._settings.dast_poll_interval_seconds,
             dast_timeout_seconds=self._settings.dast_timeout_seconds,
             token_url=self.token_url.text().strip(),
@@ -797,13 +786,11 @@ class ManagerWindow(QMainWindow):
                 self._config_path,
                 client_secret=self.client_secret.text(),
                 dast_engine_api_key=self.dast_engine_api_key.text(),
-                dast_principals_json=self.dast_principals.toPlainText(),
                 machine_scope=machine_scope,
             )
             self._settings = load_settings(self._config_path)
             self.client_secret.clear()
             self.dast_engine_api_key.clear()
-            self.dast_principals.clear()
             if show_message:
                 QMessageBox.information(self, "Configuration", "Configuration saved securely.")
             self.refresh_status()

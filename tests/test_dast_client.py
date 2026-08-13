@@ -8,7 +8,6 @@ import pytest
 from radar_agent.dast_client import DastScannerClient
 from radar_agent.models import ScannerJob
 from radar_agent.outbox import ResultOutbox
-from radar_agent.secret_store import protect_secret
 from radar_agent.settings import AgentSettings
 
 
@@ -18,7 +17,7 @@ class FakeRadarClient:
         assert lease_token == "lease-token"
         return {
             "base_url": "https://api.example.test",
-            "principals": {"admin_user": {"token": "<PASTE_TOKEN_HERE>"}},
+            "principals": {"admin_user": {"token": "real-token"}},
             "auth": {
                 "inject": [
                     {
@@ -38,18 +37,6 @@ class FakeRadarClient:
 
 
 def _settings(tmp_path: Path) -> AgentSettings:
-    principals_file = tmp_path / "dast-principals.dpapi"
-    protect_secret(
-        json.dumps(
-            {
-                "projects": {
-                    "project-1": {"admin_user": {"token": "real-token"}}
-                }
-            }
-        ),
-        principals_file,
-        scope="user",
-    )
     return AgentSettings(
         _env_file=None,
         id="windows-lab-01-dast",
@@ -57,7 +44,6 @@ def _settings(tmp_path: Path) -> AgentSettings:
         dast_enabled=True,
         dast_engine_url="http://dast.local",
         dast_engine_api_key="engine-key",
-        dast_principals_file=principals_file,
         dast_poll_interval_seconds=1,
         database_path=tmp_path / "agent.db",
     )

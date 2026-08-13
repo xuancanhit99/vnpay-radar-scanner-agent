@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 from pathlib import Path
@@ -16,7 +15,6 @@ _CONFIG_FIELDS = (
     ("dast_display_name", "RADAR_AGENT_DAST_DISPLAY_NAME"),
     ("dast_engine_url", "RADAR_AGENT_DAST_ENGINE_URL"),
     ("dast_engine_api_key_file", "RADAR_AGENT_DAST_ENGINE_API_KEY_FILE"),
-    ("dast_principals_file", "RADAR_AGENT_DAST_PRINCIPALS_FILE"),
     ("dast_poll_interval_seconds", "RADAR_AGENT_DAST_POLL_INTERVAL_SECONDS"),
     ("dast_timeout_seconds", "RADAR_AGENT_DAST_TIMEOUT_SECONDS"),
     ("token_url", "RADAR_AGENT_TOKEN_URL"),
@@ -94,7 +92,6 @@ def save_settings(
     *,
     client_secret: str = "",
     dast_engine_api_key: str = "",
-    dast_principals_json: str = "",
     machine_scope: bool,
 ) -> Path:
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -137,30 +134,8 @@ def save_settings(
         elif not dast_key_file.exists():
             raise ValueError("DAST engine API key is required when DAST is enabled")
 
-        dast_principals_file = config_path.parent / "dast-principals.dpapi"
-        resolved_principals = dast_principals_json.strip()
-        if not resolved_principals and settings.dast_principals_file is not None:
-            source = settings.dast_principals_file
-            if source.exists():
-                resolved_principals = unprotect_secret(source)
-        if resolved_principals:
-            payload = json.loads(resolved_principals)
-            projects = payload.get("projects") if isinstance(payload, dict) else None
-            if not isinstance(projects, dict) or not projects:
-                raise ValueError("DAST principals JSON requires a non-empty 'projects' object")
-            protect_secret(
-                json.dumps(payload, ensure_ascii=True),
-                dast_principals_file,
-                scope="machine" if machine_scope else "user",
-            )
-            if machine_scope:
-                _secure_machine_secret(dast_principals_file)
-        elif not dast_principals_file.exists():
-            raise ValueError("DAST principals JSON is required when DAST is enabled")
-
         settings.dast_engine_api_key = ""
         settings.dast_engine_api_key_file = dast_key_file
-        settings.dast_principals_file = dast_principals_file
 
     content = serialize_settings(settings, secret_file=secret_file)
     temporary = config_path.with_suffix(config_path.suffix + ".tmp")

@@ -47,7 +47,7 @@ def test_plaintext_bootstrap_is_only_used_for_service_install() -> None:
 
 
 @pytest.mark.skipif(os.name != "nt", reason="DPAPI is Windows-only")
-def test_save_settings_protects_dast_credentials(tmp_path) -> None:
+def test_save_settings_protects_only_dast_engine_key(tmp_path) -> None:
     config_path = tmp_path / ".env"
     settings = AgentSettings(
         _env_file=None,
@@ -61,20 +61,14 @@ def test_save_settings_protects_dast_credentials(tmp_path) -> None:
         config_path,
         client_secret="client-secret",
         dast_engine_api_key="engine-key",
-        dast_principals_json=(
-            '{"projects":{"project-1":{"admin_user":{"token":"secret-token"}}}}'
-        ),
         machine_scope=False,
     )
 
     content = config_path.read_text(encoding="utf-8")
     assert "engine-key" not in content
-    assert "secret-token" not in content
+    assert "RADAR_AGENT_DAST_PRINCIPALS_FILE" not in content
     loaded = load_settings(config_path)
     assert loaded.resolved_dast_engine_api_key() == "engine-key"
-    assert loaded.resolved_dast_principals("project-1") == {
-        "admin_user": {"token": "secret-token"}
-    }
 
 
 def test_machine_scope_save_secures_the_dpapi_file(monkeypatch, tmp_path) -> None:

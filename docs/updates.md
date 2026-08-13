@@ -6,6 +6,9 @@ Scanner Manager gọi GitHub Releases API khi khởi động và khi người d�
 
 - Bản `0.8.0` thêm logical DAST worker, đồng bộ config/collection bằng lease, mã hoá API key và
   principal secret bằng DPAPI, hỗ trợ checkpoint/poll/cancel DAST scan và chạy song song với APK.
+- Bản `0.9.0` chuyển principal credential về RADAR. Agent nhận config đã ghép secret qua lease;
+  Scanner Manager không còn yêu cầu `Protected principals JSON`. Cần deploy RADAR migration
+  `202608130002` trước khi nâng Agent.
 Nếu có version Semantic Versioning mới hơn, tab **Overview** hiển thị phiên bản mới và bật nút
 **Update now**.
 

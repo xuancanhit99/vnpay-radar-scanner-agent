@@ -112,7 +112,7 @@ class DastScannerClient:
 
             config = await self._radar.get_dast_config(job.id, lease_token)
             collection = await self._radar.get_dast_collection(job.id, lease_token)
-            config["principals"] = self._merge_principals(job.project_id, config)
+            config["principals"] = self._validated_principals(config)
             project_id = quote(job.project_id, safe="")
 
             config_response = await self._client.post(
@@ -163,26 +163,16 @@ class DastScannerClient:
         finally:
             self._scan_in_progress = False
 
-    def _merge_principals(
-        self,
-        project_id: str,
-        config: dict[str, Any],
-    ) -> dict[str, dict]:
+    def _validated_principals(self, config: dict[str, Any]) -> dict[str, dict]:
         declared = config.get("principals")
         if not isinstance(declared, dict) or not declared:
             raise ValueError("Project DAST config has no declared principals")
-        protected = self._settings.resolved_dast_principals(project_id)
-        missing = sorted(set(declared) - set(protected))
-        if missing:
-            raise ValueError(f"Missing protected DAST principals: {', '.join(missing)}")
-        merged = {
-            name: {**(value if isinstance(value, dict) else {}), **protected[name]}
-            for name, value in declared.items()
-        }
-        serialized = json.dumps(merged)
+        if not all(isinstance(value, dict) and value for value in declared.values()):
+            raise ValueError("RADAR returned an empty DAST principal credential")
+        serialized = json.dumps(declared)
         if "<PASTE_TOKEN_HERE>" in serialized:
-            raise ValueError("A DAST principal still contains a token placeholder")
-        return merged
+            raise ValueError("RADAR returned a DAST principal token placeholder")
+        return declared
 
     async def _poll_scan(
         self,

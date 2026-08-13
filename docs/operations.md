@@ -87,7 +87,7 @@ kết quả scanner.
 | APK Scanner không khả dụng | Container/tiến trình đã dừng hoặc Scanner URL sai | Khởi động APK Scanner và kiểm tra `http://127.0.0.1:8000/health`. |
 | DAST Engine không khả dụng | Container dừng, URL/API key sai hoặc catalog rỗng | Kiểm tra `http://127.0.0.1:8010/health`, API key và `/v1/vulnerabilities`; không expose port ra mạng. |
 | DAST job ở queued dù Agent online | `engine_testcase_id` không có trong catalog hoặc DAST logical worker chưa bật | So sánh mapping testcase trên RADAR với capability heartbeat và kiểm tra DAST Agent ID riêng. |
-| DAST báo thiếu principal | Tên principal trong config RADAR chưa có secret tương ứng trong DPAPI | Cập nhật Protected principals JSON bằng Manager rồi **Install / Reinstall**; không đặt token vào RADAR. |
+| DAST báo thiếu principal | Tên principal trong config chưa có credential hoặc credential đã hết hạn | Admin/PIC mở **Config DAST** của project trên RADAR, cập nhật **DAST test credentials** rồi chạy lại job. |
 | DAST poll mất scan sau restart | Engine restart làm mất scan record trong RAM | Agent sẽ xóa checkpoint và chạy lại sau khi lease hợp lệ; kiểm tra idempotency của target trước khi retry. |
 | Thiết bị bị ngắt kết nối | USB debugging bị tắt, chưa chấp nhận RSA, lỗi cáp/driver hoặc emulator offline | Kiểm tra APK Scanner `/device` và `adb devices`; `usb.online=false`, `usb.cable_connected=true`, `wifi.online=true` là trạng thái hợp lệ khi `adbhide` đang bật. |
 | Job giữ trạng thái queued | Agent offline, capability không khớp hoặc không có Agent đủ điều kiện | Kiểm tra thời điểm heartbeat, `capabilities`, trạng thái scanner/thiết bị và testcase của job. |
@@ -122,7 +122,7 @@ cho phép rõ ràng.
 2. Cấu hình `ENGINE_BASE_URL_ALLOWLIST` chỉ chứa host được phê duyệt.
 3. Chạy Diagnostics và xác nhận DAST Engine có catalog khác rỗng.
 4. Kiểm tra DAST Agent trên RADAR báo đúng version, engine type và capability.
-5. Đảm bảo project config chỉ chứa tên principal/placeholder; secret thật nằm trong DPAPI.
+5. Đảm bảo tất cả principal của project báo `CONFIGURED` trên RADAR và chưa hết hạn.
 6. Chạy một testcase kiểm soát, theo dõi `Queued -> Claimed -> Running -> Completed/Failed`.
 7. Xác nhận kết quả chỉ cập nhật scan suggestion, không tự đổi trạng thái thực thi thủ công.
 

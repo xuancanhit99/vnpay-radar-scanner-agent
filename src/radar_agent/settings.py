@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 
 from pydantic import Field, field_validator
@@ -25,6 +24,8 @@ class AgentSettings(BaseSettings):
     dast_engine_url: str = "http://127.0.0.1:8010"
     dast_engine_api_key: str = ""
     dast_engine_api_key_file: Path | None = None
+    # Read legacy installations without failing. Centralized DAST credentials
+    # are now supplied by RADAR and this file is no longer used at runtime.
     dast_principals_file: Path | None = None
     dast_poll_interval_seconds: int = Field(default=2, ge=1, le=30)
     dast_timeout_seconds: int = Field(default=2700, ge=30, le=7200)
@@ -84,20 +85,6 @@ class AgentSettings(BaseSettings):
             "RADAR_AGENT_DAST_ENGINE_API_KEY or "
             "RADAR_AGENT_DAST_ENGINE_API_KEY_FILE is required when DAST is enabled"
         )
-
-    def resolved_dast_principals(self, project_id: str) -> dict[str, dict]:
-        if self.dast_principals_file is None:
-            raise ValueError("RADAR_AGENT_DAST_PRINCIPALS_FILE is required for DAST scans")
-        payload = json.loads(unprotect_secret(self.dast_principals_file))
-        projects = payload.get("projects") if isinstance(payload, dict) else None
-        if not isinstance(projects, dict):
-            raise ValueError("DAST principals secret must contain a 'projects' object")
-        principals = projects.get(project_id) or projects.get("*")
-        if not isinstance(principals, dict) or not principals:
-            raise ValueError(f"No DAST principals configured for project {project_id}")
-        if not all(isinstance(value, dict) and value for value in principals.values()):
-            raise ValueError("Each DAST principal must contain a non-empty secret object")
-        return principals
 
     def validate_runtime(self) -> None:
         self.resolved_client_secret()
