@@ -11,6 +11,8 @@ Trạng thái ổn định được kỳ vọng:
 - Request heartbeat và claim tới RADAR: HTTP `200`.
 - Heartbeat tiếp tục được gửi trong khi scan đang chạy.
 - Số dòng pending trong `agent.db` không tăng liên tục.
+- Khi bật DAST: Engine `127.0.0.1:8010` trả health/catalog, DAST logical agent có capability và
+  `device_status=not_required`.
 
 Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics kiểm tra các thành phần:
 
@@ -18,6 +20,7 @@ Dùng Scanner Manager cho các kiểm tra thường xuyên. Tab Diagnostics ki�
 2. APK Scanner `/health`.
 3. APK Scanner `/device` và quyền của thiết bị Android.
 4. RADAR `/internal/scanner/health` có xác thực.
+5. DAST Engine `/health` và `/v1/vulnerabilities` khi DAST worker được bật.
 
 Chạy Diagnostics không ghi heartbeat và không nhận hoặc thực thi scan job. Từ phiên bản `0.6.0`,
 bảng kết quả hiển thị trạng thái của từng bước ngay khi chạy xong; không cần chờ cả bốn phép kiểm
@@ -58,6 +61,8 @@ Agent ghi log có cấu trúc JSON và WinSW thực hiện log rotation. Các th
 | `Scanner agent started` | Đã tải thành công cấu hình và DPAPI secret. |
 | `GET .../health 200` | Có thể kết nối tới APK Scanner cục bộ. |
 | `GET .../device 200` | Device endpoint đã phản hồi; xem heartbeat để biết trạng thái connected/disconnected. |
+| `GET ...:8010/health 200` | DAST Engine local đang hoạt động. |
+| `GET .../v1/vulnerabilities 200` | API key Engine hợp lệ và catalog đã được tải. |
 | `POST .../token 200` | Keycloak Client Credentials hợp lệ. |
 | `GET .../internal/scanner/health 200` | RADAR chấp nhận token Scanner Agent; phép kiểm tra không ghi dữ liệu. |
 | `POST .../heartbeat 200` | RADAR đã chấp nhận định danh và trạng thái Agent. |
@@ -80,6 +85,10 @@ kết quả scanner.
 | RADAR trả `401` | Token hết hạn/không hợp lệ hoặc issuer không khớp | Xác nhận RADAR URL và realm của token cùng môi trường; Agent sẽ thử lại một lần với token mới. |
 | RADAR trả `403` | Service account thiếu role `scanner-agent` | Gán client role này cho chính service-account user của client. |
 | APK Scanner không khả dụng | Container/tiến trình đã dừng hoặc Scanner URL sai | Khởi động APK Scanner và kiểm tra `http://127.0.0.1:8000/health`. |
+| DAST Engine không khả dụng | Container dừng, URL/API key sai hoặc catalog rỗng | Kiểm tra `http://127.0.0.1:8010/health`, API key và `/v1/vulnerabilities`; không expose port ra mạng. |
+| DAST job ở queued dù Agent online | `engine_testcase_id` không có trong catalog hoặc DAST logical worker chưa bật | So sánh mapping testcase trên RADAR với capability heartbeat và kiểm tra DAST Agent ID riêng. |
+| DAST báo thiếu principal | Tên principal trong config RADAR chưa có secret tương ứng trong DPAPI | Cập nhật Protected principals JSON bằng Manager rồi **Install / Reinstall**; không đặt token vào RADAR. |
+| DAST poll mất scan sau restart | Engine restart làm mất scan record trong RAM | Agent sẽ xóa checkpoint và chạy lại sau khi lease hợp lệ; kiểm tra idempotency của target trước khi retry. |
 | Thiết bị bị ngắt kết nối | USB debugging bị tắt, chưa chấp nhận RSA, lỗi cáp/driver hoặc emulator offline | Kiểm tra APK Scanner `/device` và `adb devices`; `usb.online=false`, `usb.cable_connected=true`, `wifi.online=true` là trạng thái hợp lệ khi `adbhide` đang bật. |
 | Job giữ trạng thái queued | Agent offline, capability không khớp hoặc không có Agent đủ điều kiện | Kiểm tra thời điểm heartbeat, `capabilities`, trạng thái scanner/thiết bị và testcase của job. |
 | Agent chuyển offline trong khi đang scan | Heartbeat task lỗi hoặc Backend không nhận heartbeat quá ngưỡng offline | Kiểm tra log `Could not send scanner agent heartbeat`, kết nối RADAR và chu kỳ heartbeat. |
@@ -106,6 +115,16 @@ Trước khi tạo job thật:
 
 Không kiểm thử trên thiết bị cá nhân hoặc tài khoản ứng dụng cá nhân, trừ khi kế hoạch kiểm thử
 cho phép rõ ràng.
+
+## Kiểm tra DAST trước khi chạy
+
+1. Xác nhận DAST Engine chỉ bind `127.0.0.1:8010` và container đang healthy.
+2. Cấu hình `ENGINE_BASE_URL_ALLOWLIST` chỉ chứa host được phê duyệt.
+3. Chạy Diagnostics và xác nhận DAST Engine có catalog khác rỗng.
+4. Kiểm tra DAST Agent trên RADAR báo đúng version, engine type và capability.
+5. Đảm bảo project config chỉ chứa tên principal/placeholder; secret thật nằm trong DPAPI.
+6. Chạy một testcase kiểm soát, theo dõi `Queued -> Claimed -> Running -> Completed/Failed`.
+7. Xác nhận kết quả chỉ cập nhật scan suggestion, không tự đổi trạng thái thực thi thủ công.
 
 ## Khôi phục outbox
 

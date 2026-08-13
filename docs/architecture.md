@@ -74,23 +74,35 @@ sequenceDiagram
     participant UI as RADAR Web
     participant API as RADAR Backend
     participant Agent as Scanner Agent
-    participant Scanner as APK Scanner
+    participant Local as APK Scanner / DAST Engine
     participant DB as SQLite outbox
 
     UI->>API: Tạo scan job
     Agent->>API: Gửi heartbeat
     Agent->>API: Nhận job (long polling)
     API-->>Agent: Trả job và lease token
+    API-->>Agent: Job đúng engine type/capability + lease token
     Agent->>API: Đánh dấu job đã bắt đầu
     par Thực thi quét
-        Agent->>Scanner: POST /scan
-        Scanner-->>Agent: pass / fail / warning / error
+        alt APK job
+            Agent->>Local: POST APK /scan
+        else DAST job
+            Agent->>API: GET config + collection bằng lease
+            Agent->>Agent: Ghép principal secret từ DPAPI
+            Agent->>Local: PUT config + collection, POST scan
+            Agent->>DB: Lưu engine_scan_id checkpoint
+            loop Cho tới khi DAST hoàn tất
+                Agent->>Local: Poll scan result
+            end
+        end
+        Local-->>Agent: pass / fail / warning / error
     and Duy trì lease
         loop Cho tới khi quét xong
             Agent->>API: Gia hạn lease
         end
     end
     Agent->>DB: Lưu kết quả
+    Agent->>DB: Xóa checkpoint khi đã có kết quả
     Agent->>API: Gửi kết quả
     API-->>Agent: Chấp nhận
     Agent->>DB: Xóa kết quả đã gửi
@@ -105,6 +117,15 @@ Worker chạy hai vòng lặp độc lập:
 3. Worker khởi động job đã nhận và gia hạn lease ở background.
 4. Worker thực thi testcase qua scanner cục bộ.
 5. Worker lưu kết quả vào SQLite trước khi gửi tới RADAR.
+
+Với DAST, Agent lưu thêm cặp `job_id -> project_id + engine_scan_id`. Nếu cùng máy Agent restart
+trong lúc Engine còn giữ scan record, worker claim lại job sau khi lease cũ hết hạn, đọc checkpoint
+và tiếp tục poll thay vì tạo một scan mới. Worker trên máy khác không có checkpoint cục bộ. Nếu
+Engine đã restart và trả `404`, checkpoint bị xóa và Agent đồng bộ material rồi chạy lại job.
+
+DAST config/collection luôn được lấy lại sau khi claim, vì vậy job sử dụng material mới nhất của
+project tại thời điểm thực thi. Riêng request testcase nằm trong job là snapshot tại thời điểm
+enqueue để đảm bảo audit được payload đã chạy.
 
 Thứ tự này ưu tiên độ bền của kết quả hơn việc nhận job mới. Nếu RADAR không khả dụng khi
 outbox đang có dữ liệu chờ, Agent sẽ thử gửi lại trước khi nhận thêm job. Vòng worker chỉ bắt
@@ -136,12 +157,14 @@ job hoặc log.
   độc lập. `TC-MOBI-13` không yêu cầu USB ADB phải online từ trước: khi `adbhide` đang bật,
   Agent có thể điều khiển qua Wi-Fi và APK Scanner tự kiểm tra cáp rồi chuyển sang USB. Với
   Scanner API cũ chưa trả trạng thái cáp, Agent chỉ precheck có USB hoặc Wi-Fi đang online.
-- Mức đồng thời: một job cho mỗi tiến trình Agent.
+- Mức đồng thời: một job cho mỗi logical worker.
+- Khi bật DAST, APK worker và DAST worker là hai task độc lập nên có thể chạy đồng thời; mỗi worker
+  vẫn chỉ xử lý một job.
 - Không chạy worker trực tiếp và Windows Service cùng lúc trên một máy.
 - Yêu cầu hủy job từ RADAR được ghi nhận khi gia hạn lease, nhưng request đang chạy tới scanner
   hiện chưa bị ngắt.
-- Phiên bản Agent hiện tại chưa triển khai upload evidence. Phản hồi từ scanner được gửi dưới
-  dạng kết quả có cấu trúc.
+- Agent chưa upload file evidence riêng. Phản hồi có cấu trúc của APK/DAST Engine được gửi trong
+  result payload; evidence file lớn cần contract presigned URL riêng trong phiên bản sau.
 - Trạng thái APK Scanner, kết nối thiết bị và readiness từng testcase được báo cáo độc lập trong
   mỗi heartbeat.
 

@@ -89,6 +89,7 @@ Agent không cần role partner, SPI hoặc HR-sync của VNPAY SSO.
 - [Vận hành và xử lý sự cố](docs/operations.md)
 - [Phát triển và phát hành](docs/development.md)
 - [Cập nhật tự động](docs/updates.md)
+- [Contract DAST phía RADAR Platform](https://git.vnpay.vn/ansp/application-security/vnpay-radar-platform/-/blob/develop/docs/dast-scanner-integration.md)
 
 ## Kiểm tra khi phát triển
 
