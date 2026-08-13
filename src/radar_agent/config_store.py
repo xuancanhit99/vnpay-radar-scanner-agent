@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -10,6 +11,14 @@ _CONFIG_FIELDS = (
     ("id", "RADAR_AGENT_ID"),
     ("display_name", "RADAR_AGENT_DISPLAY_NAME"),
     ("scanner_url", "RADAR_AGENT_SCANNER_URL"),
+    ("dast_enabled", "RADAR_AGENT_DAST_ENABLED"),
+    ("dast_agent_id", "RADAR_AGENT_DAST_AGENT_ID"),
+    ("dast_display_name", "RADAR_AGENT_DAST_DISPLAY_NAME"),
+    ("dast_engine_url", "RADAR_AGENT_DAST_ENGINE_URL"),
+    ("dast_engine_api_key_file", "RADAR_AGENT_DAST_ENGINE_API_KEY_FILE"),
+    ("dast_principals_file", "RADAR_AGENT_DAST_PRINCIPALS_FILE"),
+    ("dast_poll_interval_seconds", "RADAR_AGENT_DAST_POLL_INTERVAL_SECONDS"),
+    ("dast_timeout_seconds", "RADAR_AGENT_DAST_TIMEOUT_SECONDS"),
     ("token_url", "RADAR_AGENT_TOKEN_URL"),
     ("client_id", "RADAR_AGENT_CLIENT_ID"),
     ("database_path", "RADAR_AGENT_DATABASE_PATH"),
@@ -66,10 +75,12 @@ def serialize_settings(
     secret_file: Path | None,
     plaintext_secret: str | None = None,
 ) -> str:
-    lines = [
-        f"{environment_name}={_format_value(getattr(settings, field_name))}"
-        for field_name, environment_name in _CONFIG_FIELDS
-    ]
+    lines = []
+    for field_name, environment_name in _CONFIG_FIELDS:
+        value = getattr(settings, field_name)
+        if value is None:
+            continue
+        lines.append(f"{environment_name}={_format_value(value)}")
     if plaintext_secret is not None:
         lines.append(f"RADAR_AGENT_CLIENT_SECRET={_format_value(plaintext_secret)}")
     elif secret_file is not None:
@@ -82,6 +93,8 @@ def save_settings(
     config_path: Path,
     *,
     client_secret: str = "",
+    dast_engine_api_key: str = "",
+    dast_principals_json: str = "",
     machine_scope: bool,
 ) -> Path:
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -105,6 +118,49 @@ def save_settings(
             _secure_machine_secret(secret_file)
     elif not secret_file.exists():
         raise ValueError("Client secret is required before saving the configuration")
+
+    if settings.dast_enabled:
+        dast_key_file = config_path.parent / "dast-engine-api-key.dpapi"
+        resolved_dast_key = dast_engine_api_key.strip() or settings.dast_engine_api_key
+        if not resolved_dast_key and settings.dast_engine_api_key_file is not None:
+            source = settings.dast_engine_api_key_file
+            if source.exists():
+                resolved_dast_key = unprotect_secret(source)
+        if resolved_dast_key:
+            protect_secret(
+                resolved_dast_key,
+                dast_key_file,
+                scope="machine" if machine_scope else "user",
+            )
+            if machine_scope:
+                _secure_machine_secret(dast_key_file)
+        elif not dast_key_file.exists():
+            raise ValueError("DAST engine API key is required when DAST is enabled")
+
+        dast_principals_file = config_path.parent / "dast-principals.dpapi"
+        resolved_principals = dast_principals_json.strip()
+        if not resolved_principals and settings.dast_principals_file is not None:
+            source = settings.dast_principals_file
+            if source.exists():
+                resolved_principals = unprotect_secret(source)
+        if resolved_principals:
+            payload = json.loads(resolved_principals)
+            projects = payload.get("projects") if isinstance(payload, dict) else None
+            if not isinstance(projects, dict) or not projects:
+                raise ValueError("DAST principals JSON requires a non-empty 'projects' object")
+            protect_secret(
+                json.dumps(payload, ensure_ascii=True),
+                dast_principals_file,
+                scope="machine" if machine_scope else "user",
+            )
+            if machine_scope:
+                _secure_machine_secret(dast_principals_file)
+        elif not dast_principals_file.exists():
+            raise ValueError("DAST principals JSON is required when DAST is enabled")
+
+        settings.dast_engine_api_key = ""
+        settings.dast_engine_api_key_file = dast_key_file
+        settings.dast_principals_file = dast_principals_file
 
     content = serialize_settings(settings, secret_file=secret_file)
     temporary = config_path.with_suffix(config_path.suffix + ".tmp")

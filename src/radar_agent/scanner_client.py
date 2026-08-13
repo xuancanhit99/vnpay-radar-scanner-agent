@@ -269,7 +269,13 @@ class ScannerClient:
             device_model=device_model,
         )
 
-    async def run_scan(self, job: ScannerJob) -> JobResult:
+    async def run_scan(
+        self,
+        job: ScannerJob,
+        lease_token: str,
+        cancel_requested: asyncio.Event,
+    ) -> JobResult:
+        del lease_token, cancel_requested
         async with self._probe_lock:
             self._scan_in_progress = True
         try:

@@ -1,9 +1,9 @@
 # VNPAY RADAR Scanner Agent
 
-Worker biên chạy trên Windows dành cho VNPAY RADAR. Agent chủ động lấy các job quét APK từ
-RADAR Backend, giao việc thực thi cho `apk-scan-api` cục bộ và gửi kết quả về qua HTTPS.
+Worker biên chạy trên Windows dành cho VNPAY RADAR. Agent chủ động lấy các job quét APK/DAST từ
+RADAR Backend, giao việc cho engine cục bộ và gửi kết quả về qua HTTPS.
 
-Phiên bản hiện tại hỗ trợ chạy một job tại một thời điểm. Agent lấy catalog động từ APK Scanner,
+Mỗi logical worker xử lý một job tại một thời điểm; APK và DAST có thể chạy song song. Agent lấy catalog động từ APK Scanner,
 quảng bá `TC-MOBI-2`, `TC-MOBI-3`, `TC-MOBI-4`, `TC-MOBI-12`, `TC-MOBI-13` và báo readiness
 riêng cho từng testcase theo trạng thái thiết bị vật lý, cáp USB hoặc emulator. Với
 `TC-MOBI-13`, Agent chấp nhận trạng thái điều khiển qua Wi-Fi khi cáp vật lý vẫn đang cắm;
@@ -24,6 +24,7 @@ flowchart LR
     Agent -->|"Client Credentials"| SSO["VNPAY SSO"]
     Agent -->|"HTTP localhost"| Scanner["APK Scanner API"]
     Scanner -->|"ADB / USB"| Device["Thiết bị Android hoặc emulator"]
+    Agent -->|"HTTP localhost"| Dast["DAST Engine API"]
 ```
 
 Máy Windows không cần IP public hoặc quy tắc firewall cho chiều kết nối vào. Agent chủ động
