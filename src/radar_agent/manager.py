@@ -105,6 +105,12 @@ _DIAGNOSTIC_STEPS = (
 )
 
 
+def _diagnostic_steps(settings: AgentSettings) -> tuple[tuple[str, str], ...]:
+    if settings.dast_enabled:
+        return (*_DIAGNOSTIC_STEPS[:-1], ("dast", "DAST Engine"), _DIAGNOSTIC_STEPS[-1])
+    return _DIAGNOSTIC_STEPS
+
+
 def _diagnostic_spinner_icon(frame: int, size: int = 18) -> QIcon:
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -192,6 +198,7 @@ class ManagerWindow(QMainWindow):
         self._diagnostics_running = False
         self._diagnostic_results: dict[str, DiagnosticResult] = {}
         self._diagnostic_rows: dict[str, int] = {}
+        self._active_diagnostic_steps = _diagnostic_steps(self._settings)
         self._interaction_locked = False
         self._tray: TrayController | None = None
         self._tray_notice_shown = False
@@ -555,6 +562,49 @@ class ManagerWindow(QMainWindow):
         actions.addStretch()
         panel_layout.addLayout(actions)
         body_layout.addWidget(panel)
+
+        dast_panel, dast_layout = self._panel(
+            "DAST worker",
+            "Runs as a second logical agent and connects only to the local DAST engine.",
+        )
+        self.dast_enabled = QCheckBox("Enable DAST worker")
+        dast_layout.addWidget(self.dast_enabled)
+        dast_form = QFormLayout()
+        dast_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        dast_form.setHorizontalSpacing(28)
+        dast_form.setVerticalSpacing(12)
+        self.dast_agent_id = self._line_edit("windows-scanner-01-dast")
+        self.dast_display_name = self._line_edit("Windows Scanner 01 DAST")
+        self.dast_engine_url = self._line_edit("http://127.0.0.1:8010")
+        self.dast_engine_api_key = self._line_edit()
+        self.dast_engine_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.dast_engine_api_key.setPlaceholderText(
+            "Leave blank to keep the protected value"
+        )
+        for label, widget in (
+            ("DAST Agent ID", self.dast_agent_id),
+            ("DAST display name", self.dast_display_name),
+            ("DAST engine URL", self.dast_engine_url),
+            ("Engine API key", self.dast_engine_api_key),
+        ):
+            dast_form.addRow(self._field_label(label), widget)
+        dast_layout.addLayout(dast_form)
+        dast_principals_label = QLabel("Protected principals JSON")
+        dast_principals_label.setObjectName("FieldLabel")
+        dast_layout.addWidget(dast_principals_label)
+        self.dast_principals = QPlainTextEdit()
+        self.dast_principals.setPlaceholderText(
+            '{"projects":{"<project-uuid>":{"admin_user":{"token":"..."}}}}\n'
+            "Leave blank to keep the protected value."
+        )
+        self.dast_principals.setMaximumHeight(120)
+        dast_layout.addWidget(self.dast_principals)
+        dast_note = QLabel(
+            "The engine API key and principal credentials are encrypted with Windows DPAPI."
+        )
+        dast_note.setObjectName("MutedLabel")
+        dast_layout.addWidget(dast_note)
+        body_layout.addWidget(dast_panel)
         body_layout.addStretch()
         scroll.setWidget(body)
         layout.addWidget(scroll, 1)
@@ -686,6 +736,12 @@ class ManagerWindow(QMainWindow):
         self.agent_id.setText(settings.id)
         self.display_name.setText(settings.display_name)
         self.scanner_url.setText(settings.scanner_url)
+        self.dast_enabled.setChecked(settings.dast_enabled)
+        self.dast_agent_id.setText(settings.dast_agent_id)
+        self.dast_display_name.setText(settings.dast_display_name)
+        self.dast_engine_url.setText(settings.dast_engine_url)
+        self.dast_engine_api_key.clear()
+        self.dast_principals.clear()
         self.token_url.setText(settings.token_url)
         self.client_id.setText(settings.client_id)
         self.client_secret.clear()
@@ -704,6 +760,15 @@ class ManagerWindow(QMainWindow):
             id=self.agent_id.text().strip(),
             display_name=self.display_name.text().strip(),
             scanner_url=self.scanner_url.text().strip(),
+            dast_enabled=self.dast_enabled.isChecked(),
+            dast_agent_id=self.dast_agent_id.text().strip(),
+            dast_display_name=self.dast_display_name.text().strip(),
+            dast_engine_url=self.dast_engine_url.text().strip(),
+            dast_engine_api_key=self.dast_engine_api_key.text(),
+            dast_engine_api_key_file=self._settings.dast_engine_api_key_file,
+            dast_principals_file=self._settings.dast_principals_file,
+            dast_poll_interval_seconds=self._settings.dast_poll_interval_seconds,
+            dast_timeout_seconds=self._settings.dast_timeout_seconds,
             token_url=self.token_url.text().strip(),
             client_id=self.client_id.text().strip(),
             client_secret=self.client_secret.text(),
@@ -731,10 +796,14 @@ class ManagerWindow(QMainWindow):
                 settings,
                 self._config_path,
                 client_secret=self.client_secret.text(),
+                dast_engine_api_key=self.dast_engine_api_key.text(),
+                dast_principals_json=self.dast_principals.toPlainText(),
                 machine_scope=machine_scope,
             )
             self._settings = load_settings(self._config_path)
             self.client_secret.clear()
+            self.dast_engine_api_key.clear()
+            self.dast_principals.clear()
             if show_message:
                 QMessageBox.information(self, "Configuration", "Configuration saved securely.")
             self.refresh_status()
@@ -1138,15 +1207,18 @@ class ManagerWindow(QMainWindow):
             QMessageBox.critical(self, "Diagnostics", str(exc))
             return
         self._diagnostics_running = True
+        self._active_diagnostic_steps = _diagnostic_steps(settings)
         self._diagnostic_results.clear()
         self._diagnostic_rows.clear()
         self.diagnostic_button.setEnabled(False)
         self._set_diagnostics_running_visual(True)
         self.install_update_button.setEnabled(False)
-        self.diagnostic_summary_label.setText(f"Running 0/{len(_DIAGNOSTIC_STEPS)} checks")
+        self.diagnostic_summary_label.setText(
+            f"Running 0/{len(self._active_diagnostic_steps)} checks"
+        )
         self._set_label_tone(self.diagnostic_summary_label, "busy")
-        self.diagnostic_table.setRowCount(len(_DIAGNOSTIC_STEPS))
-        for row, (key, label) in enumerate(_DIAGNOSTIC_STEPS):
+        self.diagnostic_table.setRowCount(len(self._active_diagnostic_steps))
+        for row, (key, label) in enumerate(self._active_diagnostic_steps):
             self._diagnostic_rows[key] = row
             self._set_diagnostic_row(row, label, "WAITING", "Waiting to run", "—", MUTED)
 
@@ -1220,7 +1292,7 @@ class ManagerWindow(QMainWindow):
         passed = sum(item.success for item in self._diagnostic_results.values())
         completed = len(self._diagnostic_results)
         self.diagnostic_summary_label.setText(
-            f"Running {completed}/{len(_DIAGNOSTIC_STEPS)} · {passed} passed"
+            f"Running {completed}/{len(self._active_diagnostic_steps)} · {passed} passed"
         )
 
     def _diagnostics_finished(self, results: list[DiagnosticResult]) -> None:

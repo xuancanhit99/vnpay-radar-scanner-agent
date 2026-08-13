@@ -19,6 +19,16 @@ class ResultOutbox:
             )
             """
         )
+        self._connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS scan_checkpoint (
+                job_id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                engine_scan_id TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         self._connection.commit()
 
     def put(self, job_id: str, lease_token: str, result: JobResult) -> None:
@@ -49,6 +59,30 @@ class ResultOutbox:
 
     def delete(self, job_id: str) -> None:
         self._connection.execute("DELETE FROM pending_result WHERE job_id = ?", (job_id,))
+        self._connection.commit()
+
+    def put_checkpoint(self, job_id: str, project_id: str, engine_scan_id: str) -> None:
+        self._connection.execute(
+            """
+            INSERT INTO scan_checkpoint (job_id, project_id, engine_scan_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                project_id = excluded.project_id,
+                engine_scan_id = excluded.engine_scan_id
+            """,
+            (job_id, project_id, engine_scan_id),
+        )
+        self._connection.commit()
+
+    def get_checkpoint(self, job_id: str) -> tuple[str, str] | None:
+        row = self._connection.execute(
+            "SELECT project_id, engine_scan_id FROM scan_checkpoint WHERE job_id = ?",
+            (job_id,),
+        ).fetchone()
+        return (str(row[0]), str(row[1])) if row else None
+
+    def delete_checkpoint(self, job_id: str) -> None:
+        self._connection.execute("DELETE FROM scan_checkpoint WHERE job_id = ?", (job_id,))
         self._connection.commit()
 
     def close(self) -> None:

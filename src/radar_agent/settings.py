@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from pydantic import Field, field_validator
@@ -18,6 +19,15 @@ class AgentSettings(BaseSettings):
     id: str = Field(default="windows-lab-01", pattern=r"^[A-Za-z0-9._-]+$")
     display_name: str = "Windows Lab 01"
     scanner_url: str = "http://127.0.0.1:8000"
+    dast_enabled: bool = False
+    dast_agent_id: str = ""
+    dast_display_name: str = ""
+    dast_engine_url: str = "http://127.0.0.1:8010"
+    dast_engine_api_key: str = ""
+    dast_engine_api_key_file: Path | None = None
+    dast_principals_file: Path | None = None
+    dast_poll_interval_seconds: int = Field(default=2, ge=1, le=30)
+    dast_timeout_seconds: int = Field(default=2700, ge=30, le=7200)
     token_url: str = (
         "https://idsafe.vnpaytest.vn/realms/VNPAY-TEST/protocol/openid-connect/token"
     )
@@ -32,7 +42,12 @@ class AgentSettings(BaseSettings):
     scanner_timeout_seconds: int = Field(default=400, ge=30, le=900)
     retry_delay_seconds: int = Field(default=5, ge=1, le=60)
 
-    @field_validator("client_secret_file", mode="before")
+    @field_validator(
+        "client_secret_file",
+        "dast_engine_api_key_file",
+        "dast_principals_file",
+        mode="before",
+    )
     @classmethod
     def normalize_empty_secret_file(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
@@ -50,5 +65,41 @@ class AgentSettings(BaseSettings):
             "RADAR_AGENT_CLIENT_SECRET or RADAR_AGENT_CLIENT_SECRET_FILE is required"
         )
 
+    @property
+    def resolved_dast_agent_id(self) -> str:
+        return self.dast_agent_id.strip() or f"{self.id}-dast"
+
+    @property
+    def resolved_dast_display_name(self) -> str:
+        return self.dast_display_name.strip() or f"{self.display_name} DAST"
+
+    def resolved_dast_engine_api_key(self) -> str:
+        if self.dast_engine_api_key:
+            return self.dast_engine_api_key
+        if self.dast_engine_api_key_file is not None:
+            secret = unprotect_secret(self.dast_engine_api_key_file)
+            if secret:
+                return secret
+        raise ValueError(
+            "RADAR_AGENT_DAST_ENGINE_API_KEY or "
+            "RADAR_AGENT_DAST_ENGINE_API_KEY_FILE is required when DAST is enabled"
+        )
+
+    def resolved_dast_principals(self, project_id: str) -> dict[str, dict]:
+        if self.dast_principals_file is None:
+            raise ValueError("RADAR_AGENT_DAST_PRINCIPALS_FILE is required for DAST scans")
+        payload = json.loads(unprotect_secret(self.dast_principals_file))
+        projects = payload.get("projects") if isinstance(payload, dict) else None
+        if not isinstance(projects, dict):
+            raise ValueError("DAST principals secret must contain a 'projects' object")
+        principals = projects.get(project_id) or projects.get("*")
+        if not isinstance(principals, dict) or not principals:
+            raise ValueError(f"No DAST principals configured for project {project_id}")
+        if not all(isinstance(value, dict) and value for value in principals.values()):
+            raise ValueError("Each DAST principal must contain a non-empty secret object")
+        return principals
+
     def validate_runtime(self) -> None:
         self.resolved_client_secret()
+        if self.dast_enabled:
+            self.resolved_dast_engine_api_key()

@@ -24,7 +24,12 @@ class FakeRadarClient:
 
 
 class FakeScannerClient:
-    async def run_scan(self, job: ScannerJob) -> JobResult:
+    async def run_scan(
+        self,
+        job: ScannerJob,
+        lease_token: str,
+        cancel_requested,
+    ) -> JobResult:
         return JobResult(result="pass", detail="No DEBUGGABLE flag", output={"ok": True})
 
 

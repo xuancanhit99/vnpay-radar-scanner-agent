@@ -22,6 +22,13 @@ qua biến môi trường của tiến trình.
 | `RADAR_AGENT_ID` | Có | `windows-lab-01`; mẫu `[A-Za-z0-9._-]+` | Định danh máy ổn định và duy nhất, dùng cho heartbeat và nhận job. Phải thay giá trị mặc định trên mỗi máy mới. |
 | `RADAR_AGENT_DISPLAY_NAME` | Có | `Windows Lab 01` | Tên scanner dễ đọc được hiển thị trên RADAR. |
 | `RADAR_AGENT_SCANNER_URL` | Có | `http://127.0.0.1:8000` | Base URL của APK Scanner cục bộ. Chỉ cho phép truy cập qua loopback. |
+| `RADAR_AGENT_DAST_ENABLED` | Không | `false` | Bật logical DAST worker trong cùng Windows Service. |
+| `RADAR_AGENT_DAST_AGENT_ID` | Khi bật DAST | `<agent-id>-dast` | ID riêng của DAST worker trên RADAR. |
+| `RADAR_AGENT_DAST_DISPLAY_NAME` | Khi bật DAST | `<display-name> DAST` | Tên hiển thị của DAST worker. |
+| `RADAR_AGENT_DAST_ENGINE_URL` | Khi bật DAST | `http://127.0.0.1:8010` | DAST Engine local, không expose ra mạng. |
+| `RADAR_AGENT_DAST_ENGINE_API_KEY_FILE` | Khi bật DAST | DPAPI file | API key engine được mã hoá theo machine scope. |
+| `RADAR_AGENT_DAST_PRINCIPALS_FILE` | Khi bật DAST | DPAPI file | JSON principal secret theo project, được mã hoá bằng DPAPI. |
+| `RADAR_AGENT_DAST_TIMEOUT_SECONDS` | Không | `2700` | Trần thời gian một DAST scan. |
 | `RADAR_AGENT_TOKEN_URL` | Có | Token endpoint của VNPAY-TEST | OIDC token endpoint đầy đủ của realm Keycloak mục tiêu. |
 | `RADAR_AGENT_CLIENT_ID` | Có | `vnpay-radar-agent` | Client ID confidential có service account. |
 | `RADAR_AGENT_CLIENT_SECRET` | Chỉ khi khởi tạo | Rỗng | Secret dạng rõ dùng khi chạy từ source hoặc cài service. Tuyệt đối không commit hoặc phân phối giá trị này. |
@@ -62,6 +69,20 @@ RADAR_AGENT_RETRY_DELAY_SECONDS=5
 ```
 
 Không đưa secret thật vào tài liệu, ảnh chụp màn hình, file mẫu hoặc source control.
+
+Principal secret nhập trong Scanner Manager có cấu trúc sau và không được ghi dạng rõ vào
+`.env`:
+
+```json
+{
+  "projects": {
+    "<radar-project-uuid>": {
+      "admin_user": {"token": "..."},
+      "low_user": {"token": "..."}
+    }
+  }
+}
+```
 
 ## Lưu trữ secret
 

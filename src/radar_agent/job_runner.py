@@ -1,13 +1,22 @@
 import asyncio
 import logging
+from typing import Protocol
 
-from radar_agent.models import JobClaim
+from radar_agent.models import JobClaim, JobResult, ScannerJob
 from radar_agent.outbox import ResultOutbox
 from radar_agent.radar_client import RadarClient
-from radar_agent.scanner_client import ScannerClient
 from radar_agent.settings import AgentSettings
 
 logger = logging.getLogger(__name__)
+
+
+class ScanEngineClient(Protocol):
+    async def run_scan(
+        self,
+        job: ScannerJob,
+        lease_token: str,
+        cancel_requested: asyncio.Event,
+    ) -> JobResult: ...
 
 
 class JobRunner:
@@ -15,7 +24,7 @@ class JobRunner:
         self,
         settings: AgentSettings,
         radar: RadarClient,
-        scanner: ScannerClient,
+        scanner: ScanEngineClient,
         outbox: ResultOutbox,
     ):
         self._settings = settings
@@ -37,12 +46,23 @@ class JobRunner:
         job = claim.job
         await self._radar.start_job(job.id, claim.lease_token)
         stop_renewal = asyncio.Event()
+        cancel_requested = asyncio.Event()
         renewal_task = asyncio.create_task(
-            self._renew_lease(job.id, claim.lease_token, stop_renewal)
+            self._renew_lease(
+                job.id,
+                claim.lease_token,
+                stop_renewal,
+                cancel_requested,
+            )
         )
         try:
-            result = await self._scanner.run_scan(job)
+            result = await self._scanner.run_scan(
+                job,
+                claim.lease_token,
+                cancel_requested,
+            )
             self._outbox.put(job.id, claim.lease_token, result)
+            self._outbox.delete_checkpoint(job.id)
         finally:
             stop_renewal.set()
             await renewal_task
@@ -53,6 +73,7 @@ class JobRunner:
         job_id: str,
         lease_token: str,
         stop: asyncio.Event,
+        cancel_requested: asyncio.Event,
     ) -> None:
         while True:
             try:
@@ -63,8 +84,9 @@ class JobRunner:
                 return
             except TimeoutError:
                 try:
-                    cancel_requested = await self._radar.renew_lease(job_id, lease_token)
-                    if cancel_requested:
+                    should_cancel = await self._radar.renew_lease(job_id, lease_token)
+                    if should_cancel:
+                        cancel_requested.set()
                         logger.warning("Job cancellation requested", extra={"job_id": job_id})
                 except Exception:
                     logger.exception("Could not renew scanner job lease", extra={"job_id": job_id})

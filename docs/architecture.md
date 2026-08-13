@@ -2,8 +2,8 @@
 
 ## Mục đích
 
-Scanner Agent kết nối một hệ thống RADAR với các APK Scanner phải chạy trên máy Windows có
-thiết bị Android hoặc emulator cục bộ. Kiến trúc này không yêu cầu mở ADB, Scanner API hoặc máy
+Scanner Agent kết nối RADAR với APK Scanner và DAST Engine chạy trên máy Windows trong mạng nội
+bộ. Kiến trúc này không yêu cầu mở ADB, engine API hoặc máy
 Windows cho lưu lượng mạng chiều vào.
 
 Agent là một worker thực thi. Agent không quản lý người dùng, định nghĩa bài quét, lịch sử job,
@@ -18,6 +18,7 @@ phân quyền hoặc báo cáo. Các chức năng này vẫn thuộc `vnpay-rada
 | VNPAY SSO | Cấp access token ngắn hạn của service account cho Agent. |
 | Scanner Agent | Chủ động lấy việc, điều phối thực thi, gia hạn lease và gửi kết quả. |
 | APK Scanner API | Thực thi testcase trên môi trường Android cục bộ. |
+| DAST Engine API | Thực thi testcase API đối với đích chỉ truy cập được từ mạng nội bộ. |
 | Thiết bị Android/emulator | Chạy package Android mục tiêu. |
 | SQLite outbox | Lưu kết quả đã hoàn thành cho tới khi RADAR chấp nhận. |
 
@@ -35,6 +36,7 @@ flowchart TB
         Agent["Scanner Agent service"]
         Outbox[("SQLite outbox")]
         Scanner["APK Scanner API<br/>127.0.0.1:8000"]
+        Dast["DAST Engine API<br/>127.0.0.1:8010"]
         ADB["ADB server"]
         Device["Thiết bị Android/emulator"]
     end
@@ -44,6 +46,7 @@ flowchart TB
     Agent -->|"HTTPS 443"| SSO
     Agent -->|"HTTPS 443"| Radar
     Agent -->|"HTTP loopback"| Scanner
+    Agent -->|"HTTP loopback"| Dast
     Scanner --> ADB --> Device
 ```
 
@@ -54,9 +57,15 @@ Kết nối bắt buộc:
 | Đi ra ngoài | VNPAY SSO token endpoint, HTTPS 443 | Lấy token bằng Client Credentials |
 | Đi ra ngoài | RADAR Backend, HTTPS 443 | Gọi API heartbeat, claim, lease và result |
 | Localhost | APK Scanner API, mặc định HTTP 8000 | Kiểm tra health, trạng thái thiết bị và thực thi quét |
+| Localhost | DAST Engine API, mặc định HTTP 8010 | Đồng bộ config/collection và thực thi DAST |
 | Cục bộ | ADB và USB | APK Scanner điều khiển thiết bị |
 
 Không mở cổng APK Scanner `8000` hoặc cổng ADB `5037` ra Internet.
+Không mở cổng DAST Engine `8010` ra mạng; chỉ Scanner Agent được gọi qua loopback.
+
+Khi bật DAST, một Windows Service chạy hai logical agent có ID riêng. Worker APK và DAST gửi
+heartbeat/claim độc lập nhưng dùng chung VNPAY SSO service account. Secret của engine và
+principal kiểm thử được mã hoá bằng DPAPI; RADAR chỉ lưu tên principal và placeholder.
 
 ## Vòng đời job
 

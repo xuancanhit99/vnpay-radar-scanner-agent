@@ -5,9 +5,12 @@ from pydantic import BaseModel
 
 class ScannerJob(BaseModel):
     id: str
-    agent_id: str
-    package_name: str
+    project_id: str | None = None
+    agent_id: str | None = None
+    engine_type: Literal["apk", "dast"] = "apk"
+    package_name: str | None = None
     testcase_id: str
+    request: str | None = None
     status: str
 
 

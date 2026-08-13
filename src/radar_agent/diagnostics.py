@@ -23,7 +23,10 @@ class DiagnosticResult:
 
 DiagnosticStarted = Callable[[str, str], None]
 DiagnosticCompleted = Callable[[DiagnosticResult], None]
-_RESULT_ORDER = {key: index for index, key in enumerate(("sso", "scanner", "device", "radar"))}
+_RESULT_ORDER = {
+    key: index
+    for index, key in enumerate(("sso", "scanner", "device", "dast", "radar"))
+}
 
 
 def _tls_verifier(verify_tls: bool) -> ssl.SSLContext | bool:
@@ -221,7 +224,44 @@ async def run_diagnostics(
                     )
                 )
 
+        async def check_dast() -> None:
+            notify_started("dast", "DAST Engine")
+            started = time.monotonic()
+            try:
+                base_url = settings.dast_engine_url.rstrip("/")
+                health = await client.get(f"{base_url}/health", timeout=5)
+                health.raise_for_status()
+                catalog = await client.get(
+                    f"{base_url}/v1/vulnerabilities",
+                    headers={"X-API-Key": settings.resolved_dast_engine_api_key()},
+                    timeout=10,
+                )
+                catalog.raise_for_status()
+                count = int(catalog.json().get("count") or 0)
+                completed(
+                    DiagnosticResult(
+                        "dast",
+                        "DAST Engine",
+                        count > 0,
+                        f"Local API is ready with {count} test cases",
+                        int((time.monotonic() - started) * 1000),
+                    )
+                )
+            except Exception as exc:
+                completed(
+                    DiagnosticResult(
+                        "dast",
+                        "DAST Engine",
+                        False,
+                        _error_detail(exc),
+                        int((time.monotonic() - started) * 1000),
+                    )
+                )
+
         token_task = asyncio.create_task(check_sso())
-        await asyncio.gather(token_task, check_scanner(), check_radar(token_task))
+        checks = [token_task, check_scanner(), check_radar(token_task)]
+        if settings.dast_enabled:
+            checks.append(check_dast())
+        await asyncio.gather(*checks)
 
     return sorted(results, key=lambda result: _RESULT_ORDER[result.key])

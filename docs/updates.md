@@ -3,6 +3,9 @@
 ## Luồng hoạt động
 
 Scanner Manager gọi GitHub Releases API khi khởi động và khi người dùng chọn **Check again**.
+
+- Bản `0.8.0` thêm logical DAST worker, đồng bộ config/collection bằng lease, mã hoá API key và
+  principal secret bằng DPAPI, hỗ trợ checkpoint/poll/cancel DAST scan và chạy song song với APK.
 Nếu có version Semantic Versioning mới hơn, tab **Overview** hiển thị phiên bản mới và bật nút
 **Update now**.
 
