@@ -55,6 +55,12 @@ RADAR_AGENT_BASE_URL=https://radar.example.vn
 RADAR_AGENT_ID=windows-mobile-lab-01
 RADAR_AGENT_DISPLAY_NAME=Mobile Security Lab 01
 RADAR_AGENT_SCANNER_URL=http://127.0.0.1:8000
+RADAR_AGENT_DAST_ENABLED=true
+RADAR_AGENT_DAST_AGENT_ID=windows-mobile-lab-01-dast
+RADAR_AGENT_DAST_DISPLAY_NAME=Mobile Security Lab 01 DAST
+RADAR_AGENT_DAST_ENGINE_URL=http://127.0.0.1:8010
+RADAR_AGENT_DAST_ENGINE_API_KEY_FILE=
+RADAR_AGENT_DAST_PRINCIPALS_FILE=
 RADAR_AGENT_TOKEN_URL=https://sso.example.vn/realms/REALM/protocol/openid-connect/token
 RADAR_AGENT_CLIENT_ID=vnpay-radar-agent
 RADAR_AGENT_CLIENT_SECRET=
@@ -69,6 +75,10 @@ RADAR_AGENT_RETRY_DELAY_SECONDS=5
 ```
 
 Không đưa secret thật vào tài liệu, ảnh chụp màn hình, file mẫu hoặc source control.
+
+Khi dùng Manager, người vận hành nhập Engine API key và Protected principals JSON rồi chọn
+**Install / Reinstall**. Manager mã hóa hai giá trị bằng Windows DPAPI và tự điền đường dẫn file;
+không tự nhập giá trị rõ vào các biến `*_FILE`.
 
 Principal secret nhập trong Scanner Manager có cấu trúc sau và không được ghi dạng rõ vào
 `.env`:
