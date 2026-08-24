@@ -1,6 +1,7 @@
 from pathlib import Path
 
 INSTALLER_SCRIPT = Path(__file__).parents[1] / "packaging" / "installer.nsi"
+INSTALL_SERVICE_SCRIPT = Path(__file__).parents[1] / "packaging" / "install-service.ps1"
 UNINSTALL_SCRIPT = Path(__file__).parents[1] / "packaging" / "uninstall-service.ps1"
 
 
@@ -147,3 +148,12 @@ def test_release_bundle_contains_standalone_shell_icon() -> None:
     assert '"radar-scanner.ico"' in build_script
     assert '"icon.ico"' in manager_spec
     assert '"icon.ico"' in updater_spec
+
+
+def test_service_installer_uses_environment_specific_outbox() -> None:
+    script = INSTALL_SERVICE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "RADAR_AGENT_ENVIRONMENT" in script
+    assert '"profiles\\$environment\\agent.db"' in script
+    assert "custom-[0-9a-f]{12}" in script
+    assert "Test-Path -LiteralPath (Join-Path $DataDirectory 'agent.db')" in script

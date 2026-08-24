@@ -18,6 +18,7 @@ qua biến môi trường của tiến trình.
 
 | Biến | Bắt buộc | Mặc định / ràng buộc | Mô tả |
 | --- | --- | --- | --- |
+| `RADAR_AGENT_ENVIRONMENT` | Có | `development`; `development`, `uat`, `custom` | Profile RADAR đang hoạt động. Manager quản lý giá trị này qua danh sách preset. |
 | `RADAR_AGENT_BASE_URL` | Có | `https://radar.vnpay.dev` | Origin của RADAR Backend. Không thêm API path hoặc endpoint phía sau. |
 | `RADAR_AGENT_ID` | Có | `windows-lab-01`; mẫu `[A-Za-z0-9._-]+` | Định danh máy ổn định và duy nhất, dùng cho heartbeat và nhận job. Phải thay giá trị mặc định trên mỗi máy mới. |
 | `RADAR_AGENT_DISPLAY_NAME` | Có | `Windows Lab 01` | Tên scanner dễ đọc được hiển thị trên RADAR. |
@@ -32,7 +33,7 @@ qua biến môi trường của tiến trình.
 | `RADAR_AGENT_CLIENT_ID` | Có | `vnpay-radar-agent` | Client ID confidential có service account. |
 | `RADAR_AGENT_CLIENT_SECRET` | Chỉ khi khởi tạo | Rỗng | Secret dạng rõ dùng khi chạy từ source hoặc cài service. Tuyệt đối không commit hoặc phân phối giá trị này. |
 | `RADAR_AGENT_CLIENT_SECRET_FILE` | Được quản lý tự động | Rỗng | Đường dẫn tới secret nhị phân được DPAPI bảo vệ. Do Manager/service installer thiết lập. |
-| `RADAR_AGENT_DATABASE_PATH` | Có | `./agent.db` | SQLite outbox lưu kết quả. Bản cài service ghi đè bằng đường dẫn trong `ProgramData`. |
+| `RADAR_AGENT_DATABASE_PATH` | Có | Theo profile | SQLite outbox riêng của môi trường. Manager và service installer tự quản lý đường dẫn này. |
 | `RADAR_AGENT_VERIFY_TLS` | Có | `true` | Kiểm tra chứng thư cho kết nối HTTPS tới VNPAY SSO và RADAR. |
 | `RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS` | Không | `10`, khoảng `5..30` | Chu kỳ báo trạng thái Agent/scanner/thiết bị, chạy độc lập với bài quét. |
 | `RADAR_AGENT_POLL_WAIT_SECONDS` | Không | `20`, khoảng `0..25` | Thời gian long-poll khi chờ nhận job. |
@@ -50,6 +51,7 @@ nội bộ khi thiết bị chưa kết nối hoặc ADB không trả được t
 ## Ví dụ
 
 ```dotenv
+RADAR_AGENT_ENVIRONMENT=custom
 RADAR_AGENT_BASE_URL=https://radar.example.vn
 RADAR_AGENT_ID=windows-mobile-lab-01
 RADAR_AGENT_DISPLAY_NAME=Mobile Security Lab 01
@@ -63,7 +65,7 @@ RADAR_AGENT_TOKEN_URL=https://sso.example.vn/realms/REALM/protocol/openid-connec
 RADAR_AGENT_CLIENT_ID=vnpay-radar-agent
 RADAR_AGENT_CLIENT_SECRET=
 RADAR_AGENT_CLIENT_SECRET_FILE=
-RADAR_AGENT_DATABASE_PATH=./agent.db
+RADAR_AGENT_DATABASE_PATH=./profiles/custom-b762fbcc6bf4/agent.db
 RADAR_AGENT_VERIFY_TLS=true
 RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS=10
 RADAR_AGENT_POLL_WAIT_SECONDS=20
@@ -117,6 +119,12 @@ hình Windows Service.
 
 - Agent ID phải duy nhất trong mỗi môi trường RADAR.
 - Giữ nguyên Agent ID qua các lần nâng cấp để RADAR cập nhật đúng bản ghi scanner hiện có.
+- Manager cung cấp ba lựa chọn: **Development**, **UAT** và **Custom**. Hai preset đầu tự điền
+  và khóa RADAR URL/SSO token URL; Custom cho phép nhập endpoint khác.
+- Mỗi profile sử dụng một SQLite outbox riêng. Không sửa thủ công
+  `RADAR_AGENT_DATABASE_PATH` để dùng chung database giữa hai RADAR origin.
+- Trước khi đổi profile, dừng Windows Service hoặc direct process. Nếu profile hiện tại còn kết
+  quả/checkpoint chưa gửi, Manager cảnh báo và giữ nguyên dữ liệu đó trong outbox cũ.
 - Dùng Keycloak client hoặc secret riêng cho development, test, UAT và production theo chính
   sách bảo mật của từng môi trường.
 - Trỏ `BASE_URL` và `TOKEN_URL` tới cùng một môi trường.

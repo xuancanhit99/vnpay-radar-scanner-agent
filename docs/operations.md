@@ -32,6 +32,22 @@ Scanner Manager chạy một instance trong mỗi phiên đăng nhập Windows. 
 dụng xuống system tray. Menu tray cung cấp các thao tác nhanh: mở Manager, chạy Diagnostics, mở log,
 kiểm tra update, Start/Stop/Restart service và Exit.
 
+## Chuyển môi trường RADAR
+
+Một bản phát hành hỗ trợ cả DEV và UAT; không cài hai binary khác nhau. Để chuyển môi trường:
+
+1. Xác nhận không có job đang chạy và chờ Agent gửi hết kết quả của môi trường hiện tại.
+2. Dừng `VNPAYRadarScannerAgent` trong tab Overview.
+3. Chọn preset **Development**, **UAT** hoặc **Custom** trong tab Configuration.
+4. Kiểm tra Agent ID, Client ID/secret và endpoint được hiển thị.
+5. Chọn **Save configuration**, sau đó **Install / Reinstall**.
+6. Chạy Diagnostics và xác nhận Agent online đúng trên trang Scanners của môi trường mới.
+
+Manager không cho đổi profile khi Service/direct process còn chạy. SQLite outbox của môi trường
+cũ được giữ lại và không được gửi sang môi trường mới. Khi môi trường DEV ngừng sử dụng, bỏ DEV
+khỏi quy trình vận hành và đổi preset mặc định trong một bản phát hành sau; không tự động xóa
+outbox DEV vì có thể còn cần đối soát hoặc rollback.
+
 ## Kiểm tra bằng dòng lệnh
 
 ```powershell
@@ -93,7 +109,7 @@ kết quả scanner.
 | Job giữ trạng thái queued | Agent offline, capability không khớp hoặc không có Agent đủ điều kiện | Kiểm tra thời điểm heartbeat, `capabilities`, trạng thái scanner/thiết bị và testcase của job. |
 | Agent chuyển offline trong khi đang scan | Heartbeat task lỗi hoặc Backend không nhận heartbeat quá ngưỡng offline | Kiểm tra log `Could not send scanner agent heartbeat`, kết nối RADAR và chu kỳ heartbeat. |
 | Cùng một máy xuất hiện hai lần | Agent ID khác nhau hoặc service và worker trực tiếp cùng chạy | Dừng tiến trình trùng và chỉ giữ một Agent ID ổn định. |
-| Không thấy kết quả trên RADAR | Backend không khả dụng; kết quả có thể vẫn nằm trong SQLite outbox | Khôi phục kết nối RADAR và giữ nguyên `agent.db`; Agent sẽ thử gửi lại trước khi nhận việc mới. |
+| Không thấy kết quả trên RADAR | Backend không khả dụng; kết quả có thể vẫn nằm trong SQLite outbox của profile hiện tại | Khôi phục kết nối RADAR và không xóa file `profiles/<profile>/agent.db`; Agent sẽ thử gửi lại trước khi nhận việc mới. |
 | Lỗi lease lặp lại | Độ trễ Backend/lỗi mạng hoặc chu kỳ gia hạn quá dài | Kiểm tra kết nối RADAR và so sánh chu kỳ gia hạn với thời hạn lease từ Backend. |
 | Setup không thể thay thế file | Service/tiến trình hiện tại vẫn đang giữ file thực thi | Dùng Setup 0.3.1 trở lên để tự động đóng Manager và dừng/khởi động lại service. |
 | Manager không kiểm tra được bản mới | Không truy cập được GitHub API, proxy chặn hoặc TLS lỗi | Kiểm tra HTTPS chiều đi tới `api.github.com` và `github.com`, sau đó chọn **Check again**. |
@@ -130,7 +146,7 @@ cho phép rõ ràng.
 
 Outbox bảo vệ kết quả đã hoàn thành trong thời gian RADAR tạm thời gián đoạn. Khi khôi phục:
 
-- Không xóa hoặc thay thế `agent.db`.
+- Không xóa hoặc thay thế file `agent.db` của profile đang xử lý.
 - Không đổi Agent ID trừ khi có chỉ dẫn từ người phụ trách Backend.
 - Khôi phục kết nối SSO/RADAR và khởi động lại service nếu cần.
 - Chờ thông báo `Delivered scanner result` trước khi tạo thêm job.

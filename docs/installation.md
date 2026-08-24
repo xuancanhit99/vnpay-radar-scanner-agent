@@ -41,12 +41,12 @@ tin nhắn, ticket, ảnh chụp màn hình, repository hoặc gói log.
 3. Chạy Setup với quyền Administrator.
 4. Mở **RADAR Scanner Manager** từ menu Start hoặc shortcut trên desktop.
 5. Trong tab **Configuration**, thiết lập tối thiểu:
-   - RADAR URL
+   - Profile **Development**, **UAT** hoặc **Custom**
+   - RADAR URL khi dùng Custom
    - Agent ID duy nhất và tên hiển thị
    - APK Scanner URL
-   - SSO token URL
+   - SSO token URL khi dùng Custom
    - Client ID và client secret
-   - model thiết bị
 6. Chọn **Save configuration**.
 7. Chọn **Install / Reinstall** trong tab Overview.
 8. Mở **Diagnostics** và xác nhận cả bốn phép kiểm tra đều thành công.
@@ -64,7 +64,8 @@ theo máy. Để trống trường Client secret sẽ giữ nguyên secret hiệ
 | File thực thi Updater | `C:\Program Files\VNPAY\Radar Scanner Agent\radar-scanner-updater.exe` |
 | Cấu hình | `C:\ProgramData\VNPAY\RadarScannerAgent\.env` |
 | DPAPI secret | `C:\ProgramData\VNPAY\RadarScannerAgent\client-secret.dpapi` |
-| SQLite outbox | `C:\ProgramData\VNPAY\RadarScannerAgent\agent.db` |
+| SQLite outbox DEV cũ | `C:\ProgramData\VNPAY\RadarScannerAgent\agent.db` |
+| SQLite outbox theo profile | `C:\ProgramData\VNPAY\RadarScannerAgent\profiles\<profile>\agent.db` |
 | Log của service | `C:\ProgramData\VNPAY\RadarScannerAgent\logs` |
 | Windows Service | `VNPAYRadarScannerAgent` |
 
@@ -111,7 +112,8 @@ Khi service đã tồn tại, Setup sẽ:
 1. Đóng các process Scanner Manager đang mở để giải phóng file thực thi.
 2. Phát hiện và dừng service.
 3. Thay thế các file chương trình.
-4. Giữ nguyên cấu hình, DPAPI secret, log và SQLite outbox trong `ProgramData`.
+4. Giữ nguyên cấu hình, DPAPI secret, log và toàn bộ SQLite outbox theo profile trong
+   `ProgramData`.
 5. Khởi động lại service.
 
 Sau mỗi lần nâng cấp, kiểm tra phiên bản/trạng thái heartbeat của service và chạy Diagnostics
@@ -145,8 +147,10 @@ uv sync --group dev
 uv run radar-scanner-agent
 ```
 
-`.env.example` trong source dùng `./agent.db`. Trình cài Windows Service luôn ghi đè đường
-dẫn cơ sở dữ liệu bằng vị trí được bảo vệ trong `ProgramData`.
+`.env.example` trong source dùng outbox DEV tại `./profiles/development/agent.db`. Trình cài
+Windows Service chuyển đường dẫn profile sang vị trí được bảo vệ trong `ProgramData`. Nếu bản
+cài cũ đã có `ProgramData\agent.db`, profile Development tiếp tục dùng file đó để không mất dữ
+liệu đang chờ.
 
 ## Cài service thủ công
 

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -39,6 +40,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QStyle,
@@ -70,6 +72,16 @@ from radar_agent.desktop_theme import (
     vnpay_logo_pixmap,
 )
 from radar_agent.diagnostics import DiagnosticResult, run_diagnostics
+from radar_agent.environment_profiles import (
+    CUSTOM,
+    DEVELOPMENT,
+    ENVIRONMENT_PRESETS,
+    database_path_for_environment,
+    environment_label,
+    normalize_radar_origin,
+    preset_for,
+)
+from radar_agent.outbox import pending_outbox_items
 from radar_agent.runtime_paths import (
     SERVICE_NAME,
     default_config_path,
@@ -376,10 +388,11 @@ class ManagerWindow(QMainWindow):
         self.direct_dot, self.direct_status = self._status_row(
             status_grid, 1, "Direct process", "Checking..."
         )
-        self.agent_status = self._metadata_row(status_grid, 2, "Agent ID")
-        self.version_status = self._metadata_row(status_grid, 3, "Version", __version__)
-        self.config_status = self._metadata_row(status_grid, 4, "Configuration")
-        self.package_status = self._metadata_row(status_grid, 5, "Package")
+        self.environment_status = self._metadata_row(status_grid, 2, "Environment")
+        self.agent_status = self._metadata_row(status_grid, 3, "Agent ID")
+        self.version_status = self._metadata_row(status_grid, 4, "Version", __version__)
+        self.config_status = self._metadata_row(status_grid, 5, "Configuration")
+        self.package_status = self._metadata_row(status_grid, 6, "Package")
         runtime_layout.addLayout(status_grid)
         body_layout.addWidget(runtime)
 
@@ -512,6 +525,14 @@ class ManagerWindow(QMainWindow):
         form.setHorizontalSpacing(28)
         form.setVerticalSpacing(12)
 
+        self.environment_profile = QComboBox()
+        self.environment_profile.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        for preset in ENVIRONMENT_PRESETS:
+            self.environment_profile.addItem(preset.label, preset.id)
+        self.environment_profile.addItem("Custom", CUSTOM)
         self.base_url = self._line_edit("https://radar.example.com")
         self.agent_id = self._line_edit("windows-scanner-01")
         self.display_name = self._line_edit("Windows Scanner 01")
@@ -526,8 +547,12 @@ class ManagerWindow(QMainWindow):
         self.lease_interval = self._spinbox(5, 30)
         self.scanner_timeout = self._spinbox(30, 900)
         self.retry_delay = self._spinbox(1, 60)
+        self.profile_database = self._line_edit()
+        self.profile_database.setReadOnly(True)
+        self.profile_database.setClearButtonEnabled(False)
 
         for label, widget in (
+            ("Environment", self.environment_profile),
             ("RADAR URL", self.base_url),
             ("Agent ID", self.agent_id),
             ("Display name", self.display_name),
@@ -540,10 +565,15 @@ class ManagerWindow(QMainWindow):
             ("Lease renewal (seconds)", self.lease_interval),
             ("Scanner timeout (seconds)", self.scanner_timeout),
             ("Retry delay (seconds)", self.retry_delay),
+            ("Profile outbox", self.profile_database),
         ):
             field_label = QLabel(label)
             field_label.setObjectName("FieldLabel")
             form.addRow(field_label, widget)
+
+        self.environment_profile.currentIndexChanged.connect(
+            self._environment_selection_changed
+        )
 
         self.verify_tls = QCheckBox("Verify TLS certificates")
         form.addRow(self._field_label("TLS"), self.verify_tls)
@@ -723,6 +753,10 @@ class ManagerWindow(QMainWindow):
 
     def _load_form(self) -> None:
         settings = self._settings
+        self.environment_profile.blockSignals(True)
+        environment_index = self.environment_profile.findData(settings.environment)
+        self.environment_profile.setCurrentIndex(max(0, environment_index))
+        self.environment_profile.blockSignals(False)
         self.base_url.setText(settings.base_url)
         self.agent_id.setText(settings.id)
         self.display_name.setText(settings.display_name)
@@ -741,12 +775,72 @@ class ManagerWindow(QMainWindow):
         self.lease_interval.setValue(settings.lease_renew_interval_seconds)
         self.scanner_timeout.setValue(settings.scanner_timeout_seconds)
         self.retry_delay.setValue(settings.retry_delay_seconds)
+        self._apply_environment_mode()
+
+    def _environment_selection_changed(self) -> None:
+        selected = str(self.environment_profile.currentData())
+        preset = preset_for(selected)
+        if preset:
+            self.base_url.setText(preset.base_url)
+            self.token_url.setText(preset.token_url)
+        elif any(
+            self.base_url.text().strip() == candidate.base_url
+            for candidate in ENVIRONMENT_PRESETS
+        ):
+            self.base_url.clear()
+        self._apply_environment_mode()
+
+    def _apply_environment_mode(self) -> None:
+        selected = str(self.environment_profile.currentData())
+        preset = preset_for(selected)
+        self.base_url.setReadOnly(preset is not None)
+        self.token_url.setReadOnly(preset is not None)
+        base_url = self.base_url.text().strip()
+        if not base_url:
+            self.profile_database.clear()
+            return
+        try:
+            database_path = database_path_for_environment(
+                self._config_path.parent,
+                selected,
+                base_url,
+            )
+        except ValueError:
+            self.profile_database.clear()
+            return
+        self.profile_database.setText(str(database_path))
+
+    def _selected_database_path(self, environment: str, base_url: str) -> Path:
+        try:
+            same_origin = normalize_radar_origin(base_url) == self._settings.radar_origin
+        except ValueError:
+            same_origin = False
+        if environment == self._settings.environment and same_origin:
+            current = self._settings.database_path
+            resolved = current if current.is_absolute() else self._config_path.parent / current
+            legacy_database = self._config_path.parent / "agent.db"
+            if "profiles" in resolved.parts:
+                return resolved
+            if (
+                environment == DEVELOPMENT
+                and resolved == legacy_database
+                and resolved.exists()
+            ):
+                return resolved
+        return database_path_for_environment(
+            self._config_path.parent,
+            environment,
+            base_url,
+        )
 
     def _collect_settings(self) -> AgentSettings:
         secret_file = self._config_path.parent / "client-secret.dpapi"
+        environment = str(self.environment_profile.currentData())
+        base_url = self.base_url.text().strip()
         return AgentSettings(
             _env_file=None,
-            base_url=self.base_url.text().strip(),
+            environment=environment,
+            base_url=base_url,
             id=self.agent_id.text().strip(),
             display_name=self.display_name.text().strip(),
             scanner_url=self.scanner_url.text().strip(),
@@ -762,7 +856,7 @@ class ManagerWindow(QMainWindow):
             client_id=self.client_id.text().strip(),
             client_secret=self.client_secret.text(),
             client_secret_file=secret_file if secret_file.exists() else None,
-            database_path=self._config_path.parent / "agent.db",
+            database_path=self._selected_database_path(environment, base_url),
             verify_tls=self.verify_tls.isChecked(),
             heartbeat_interval_seconds=self.heartbeat_interval.value(),
             poll_wait_seconds=self.poll_wait.value(),
@@ -774,12 +868,15 @@ class ManagerWindow(QMainWindow):
     def reload_configuration(self) -> None:
         self._config_path = default_config_path(self._package_root)
         self._settings = self._load_settings_safely()
+        self._active_diagnostic_steps = _diagnostic_steps(self._settings)
         self._load_form()
         self.refresh_status()
 
     def save_configuration(self, *, show_message: bool = True) -> bool:
         try:
             settings = self._collect_settings()
+            if not self._allow_environment_switch(settings):
+                return False
             machine_scope = self._config_path.parent.resolve() == program_data_directory().resolve()
             save_settings(
                 settings,
@@ -789,6 +886,8 @@ class ManagerWindow(QMainWindow):
                 machine_scope=machine_scope,
             )
             self._settings = load_settings(self._config_path)
+            self._active_diagnostic_steps = _diagnostic_steps(self._settings)
+            self._load_form()
             self.client_secret.clear()
             self.dast_engine_api_key.clear()
             if show_message:
@@ -798,6 +897,52 @@ class ManagerWindow(QMainWindow):
         except (ValidationError, ValueError, OSError) as exc:
             QMessageBox.critical(self, "Configuration error", str(exc))
             return False
+
+    def _allow_environment_switch(self, settings: AgentSettings) -> bool:
+        current_path = self._settings.database_path
+        if not current_path.is_absolute():
+            current_path = self._config_path.parent / current_path
+        profile_changed = (
+            settings.environment != self._settings.environment
+            or settings.radar_origin != self._settings.radar_origin
+            or settings.database_path != current_path
+        )
+        if not profile_changed:
+            return True
+
+        direct_running = self._direct_process is not None and self._direct_process.poll() is None
+        if direct_running:
+            QMessageBox.warning(
+                self,
+                "Environment switch blocked",
+                "Stop the direct Agent process before changing environments.",
+            )
+            return False
+        try:
+            service = query_service()
+        except Exception as exc:
+            QMessageBox.critical(self, "Environment switch error", str(exc))
+            return False
+        if service.status == "running":
+            QMessageBox.warning(
+                self,
+                "Environment switch blocked",
+                "Stop the Windows Service before changing environments.",
+            )
+            return False
+
+        pending = pending_outbox_items(current_path)
+        if pending:
+            answer = QMessageBox.question(
+                self,
+                "Pending results in current environment",
+                f"{pending} pending result or checkpoint item(s) remain in "
+                f"{environment_label(self._settings.environment)}. They will stay isolated "
+                "in that profile and will not be sent to the new environment. Continue?",
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return False
+        return True
 
     def _start_task(
         self,
@@ -852,6 +997,9 @@ class ManagerWindow(QMainWindow):
         self._set_dot(self.service_dot, service_tone)
         self.direct_status.setText("Running" if direct_running else "Stopped")
         self._set_dot(self.direct_dot, "success" if direct_running else "neutral")
+        self.environment_status.setText(
+            f"{self._settings.environment_display_name} · {self._settings.radar_origin}"
+        )
         self.agent_status.setText(self.agent_id.text() or self._settings.id)
         config_text = str(self._config_path)
         if self._configuration_error:

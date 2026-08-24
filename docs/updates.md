@@ -4,6 +4,8 @@
 
 Scanner Manager gọi GitHub Releases API khi khởi động và khi người dùng chọn **Check again**.
 
+- Bản `0.9.1` thêm preset Development/UAT/Custom. Chỉ một profile hoạt động tại một thời điểm;
+  mỗi RADAR origin dùng SQLite outbox riêng để không gửi nhầm result hoặc DAST checkpoint.
 - Bản `0.8.0` thêm logical DAST worker, đồng bộ config/collection bằng lease, mã hoá API key và
   principal secret bằng DPAPI, hỗ trợ checkpoint/poll/cancel DAST scan và chạy song song với APK.
 - Bản `0.9.0` chuyển principal credential về RADAR. Agent nhận config đã ghép secret qua lease;

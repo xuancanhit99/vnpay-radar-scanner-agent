@@ -55,7 +55,11 @@ async def _heartbeat_loop(
 
 async def run_agent(settings: AgentSettings) -> None:
     settings.validate_runtime()
-    outbox = ResultOutbox(settings.database_path)
+    outbox = ResultOutbox(
+        settings.database_path,
+        radar_origin=settings.radar_origin,
+        environment=settings.environment,
+    )
     timeout = httpx.Timeout(30.0, connect=10.0)
     async with httpx.AsyncClient(
         verify=_tls_verifier(settings.verify_tls),

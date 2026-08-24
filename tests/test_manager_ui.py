@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCheckBox, QHeaderView
@@ -11,6 +12,8 @@ from radar_agent.desktop_theme import (
     vnpay_logo_pixmap,
 )
 from radar_agent.manager import ManagerWindow
+from radar_agent.service_control import ServiceState
+from radar_agent.settings import AgentSettings
 from radar_agent.update_service import UpdateInfo
 
 
@@ -37,8 +40,74 @@ def test_manager_builds_modern_navigation_pages(tmp_path, monkeypatch) -> None:
         assert window.install_button.text() == "Install / Reinstall"
         assert not hasattr(window, "device_model")
         assert not hasattr(window, "dast_principals")
+        assert [window.environment_profile.itemText(index) for index in range(3)] == [
+            "Development",
+            "UAT",
+            "Custom",
+        ]
         assert window.windowTitle().startswith("VNPAY RADAR Scanner Manager")
         assert not window.vnpay_brand_logo.pixmap().isNull()
+        application.processEvents()
+    finally:
+        window._exiting = True
+        window.close()
+
+
+def test_environment_preset_updates_urls_and_profile_database(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RADAR_AGENT_MANAGER_CONFIG", str(tmp_path / ".env"))
+    application = _application()
+    window = ManagerWindow(start_background_tasks=False)
+
+    try:
+        window.environment_profile.setCurrentIndex(
+            window.environment_profile.findData("uat")
+        )
+        application.processEvents()
+
+        assert window.base_url.text() == "https://radar.vnpaytest.vn"
+        assert window.base_url.isReadOnly()
+        assert window.token_url.isReadOnly()
+        assert window.environment_profile.sizePolicy().horizontalPolicy().name == "Expanding"
+        assert Path(window.profile_database.text()) == (
+            tmp_path / "profiles" / "uat" / "agent.db"
+        )
+
+        window.environment_profile.setCurrentIndex(
+            window.environment_profile.findData("custom")
+        )
+        application.processEvents()
+        assert not window.base_url.isReadOnly()
+        assert not window.token_url.isReadOnly()
+    finally:
+        window._exiting = True
+        window.close()
+
+
+def test_environment_switch_is_blocked_while_service_runs(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("RADAR_AGENT_MANAGER_CONFIG", str(tmp_path / ".env"))
+    monkeypatch.setattr(
+        manager_module,
+        "query_service",
+        lambda: ServiceState(installed=True, status="running"),
+    )
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        manager_module.QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(message),
+    )
+    application = _application()
+    window = ManagerWindow(start_background_tasks=False)
+    uat_settings = AgentSettings(
+        _env_file=None,
+        environment="uat",
+        base_url="https://radar.vnpaytest.vn",
+        database_path=tmp_path / "profiles" / "uat" / "agent.db",
+    )
+
+    try:
+        assert not window._allow_environment_switch(uat_settings)
+        assert warnings == ["Stop the Windows Service before changing environments."]
         application.processEvents()
     finally:
         window._exiting = True

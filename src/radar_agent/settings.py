@@ -1,8 +1,13 @@
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from radar_agent.environment_profiles import (
+    environment_label,
+    normalize_radar_origin,
+    resolve_environment,
+)
 from radar_agent.secret_store import unprotect_secret
 
 
@@ -14,6 +19,7 @@ class AgentSettings(BaseSettings):
         extra="ignore",
     )
 
+    environment: str = ""
     base_url: str = "https://radar.vnpay.dev"
     id: str = Field(default="windows-lab-01", pattern=r"^[A-Za-z0-9._-]+$")
     display_name: str = "Windows Lab 01"
@@ -43,6 +49,12 @@ class AgentSettings(BaseSettings):
     scanner_timeout_seconds: int = Field(default=400, ge=30, le=900)
     retry_delay_seconds: int = Field(default=5, ge=1, le=60)
 
+    @model_validator(mode="after")
+    def resolve_environment_profile(self) -> "AgentSettings":
+        self.base_url = normalize_radar_origin(self.base_url)
+        self.environment = resolve_environment(self.environment, self.base_url)
+        return self
+
     @field_validator(
         "client_secret_file",
         "dast_engine_api_key_file",
@@ -65,6 +77,14 @@ class AgentSettings(BaseSettings):
         raise ValueError(
             "RADAR_AGENT_CLIENT_SECRET or RADAR_AGENT_CLIENT_SECRET_FILE is required"
         )
+
+    @property
+    def radar_origin(self) -> str:
+        return normalize_radar_origin(self.base_url)
+
+    @property
+    def environment_display_name(self) -> str:
+        return environment_label(self.environment)
 
     @property
     def resolved_dast_agent_id(self) -> str:

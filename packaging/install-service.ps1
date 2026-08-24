@@ -121,7 +121,33 @@ foreach ($entry in $config.GetEnumerator() | Sort-Object Key) {
     $serviceConfig.Add("$($entry.Key)=$($entry.Value)")
 }
 $serviceConfig.Add("RADAR_AGENT_CLIENT_SECRET_FILE=$($secretFile.Replace('\', '/'))")
-$databaseFile = Join-Path $DataDirectory "agent.db"
+$configuredDatabase = [string]$config['RADAR_AGENT_DATABASE_PATH']
+$environment = ([string]$config['RADAR_AGENT_ENVIRONMENT']).Trim().ToLowerInvariant()
+if (-not $environment) {
+    $baseUrl = ([string]$config['RADAR_AGENT_BASE_URL']).Trim().TrimEnd('/')
+    if ($baseUrl -eq 'https://radar.vnpay.dev') {
+        $environment = 'development'
+    } elseif ($baseUrl -eq 'https://radar.vnpaytest.vn') {
+        $environment = 'uat'
+    } else {
+        $environment = 'custom'
+    }
+}
+$profileDirectory = $null
+if ($configuredDatabase -match '[\\/]profiles[\\/](?<profile>[^\\/]+)[\\/]agent\.db$') {
+    $profileDirectory = $Matches['profile']
+}
+if ($environment -eq 'development' -and (Test-Path -LiteralPath (Join-Path $DataDirectory 'agent.db'))) {
+    $databaseFile = Join-Path $DataDirectory 'agent.db'
+} elseif ($profileDirectory -and $profileDirectory -match '^(development|uat|custom-[0-9a-f]{12})$') {
+    $databaseFile = Join-Path $DataDirectory "profiles\$profileDirectory\agent.db"
+} elseif ($environment -in @('development', 'uat')) {
+    $databaseFile = Join-Path $DataDirectory "profiles\$environment\agent.db"
+} else {
+    throw 'RADAR_AGENT_DATABASE_PATH must identify a managed environment profile.'
+}
+$databaseDirectory = Split-Path -Parent $databaseFile
+New-Item -ItemType Directory -Path $databaseDirectory -Force | Out-Null
 $serviceConfig.Add("RADAR_AGENT_DATABASE_PATH=$($databaseFile.Replace('\', '/'))")
 $installedEnv = Join-Path $DataDirectory ".env"
 [IO.File]::WriteAllLines($installedEnv, $serviceConfig, [Text.UTF8Encoding]::new($false))

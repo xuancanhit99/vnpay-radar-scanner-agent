@@ -6,6 +6,7 @@ from radar_agent.secret_store import protect_secret, unprotect_secret
 from radar_agent.settings import AgentSettings
 
 _CONFIG_FIELDS = (
+    ("environment", "RADAR_AGENT_ENVIRONMENT"),
     ("base_url", "RADAR_AGENT_BASE_URL"),
     ("id", "RADAR_AGENT_ID"),
     ("display_name", "RADAR_AGENT_DISPLAY_NAME"),

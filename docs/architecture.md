@@ -20,7 +20,8 @@ phân quyền hoặc báo cáo. Các chức năng này vẫn thuộc `vnpay-rada
 | APK Scanner API | Thực thi testcase trên môi trường Android cục bộ. |
 | DAST Engine API | Thực thi testcase API đối với đích chỉ truy cập được từ mạng nội bộ. |
 | Thiết bị Android/emulator | Chạy package Android mục tiêu. |
-| SQLite outbox | Lưu kết quả đã hoàn thành cho tới khi RADAR chấp nhận. |
+| Profile môi trường | Chọn một RADAR origin đang hoạt động: Development, UAT hoặc Custom. |
+| SQLite outbox | Lưu kết quả đã hoàn thành theo từng profile cho tới khi đúng RADAR origin chấp nhận. |
 
 ## Ranh giới mạng và tin cậy
 
@@ -34,7 +35,7 @@ flowchart TB
     subgraph Windows["Máy Windows chạy scanner"]
         Manager["Scanner Manager"]
         Agent["Scanner Agent service"]
-        Outbox[("SQLite outbox")]
+        Outbox[("SQLite outbox theo profile")]
         Scanner["APK Scanner API<br/>127.0.0.1:8000"]
         Dast["DAST Engine API<br/>127.0.0.1:8010"]
         ADB["ADB server"]
@@ -147,6 +148,9 @@ job hoặc log.
 - Agent gia hạn lease theo `RADAR_AGENT_LEASE_RENEW_INTERVAL_SECONDS`.
 - Payload kết quả được insert hoặc replace theo `job_id` trong SQLite outbox.
 - Một dòng outbox chỉ bị xóa sau khi RADAR Result API chấp nhận dữ liệu.
+- Mỗi database ghi metadata RADAR origin khi mở lần đầu và từ chối chạy nếu file đã thuộc origin
+  khác. Outbox legacy còn dữ liệu được coi là DEV cho tới khi gửi hết.
+- Chỉ một profile hoạt động tại một thời điểm; việc đổi profile không di chuyển hoặc gộp dữ liệu.
 - SQLite không thay thế PostgreSQL của RADAR và không được dùng để lập báo cáo.
 
 ## Khả năng và giới hạn hiện tại

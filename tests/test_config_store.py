@@ -42,8 +42,22 @@ def test_plaintext_bootstrap_is_only_used_for_service_install() -> None:
 
     assert "RADAR_AGENT_CLIENT_SECRET=bootstrap-secret" in content
     assert "RADAR_AGENT_CLIENT_SECRET_FILE=" not in content
+    assert "RADAR_AGENT_ENVIRONMENT=development" in content
     assert "RADAR_AGENT_DEVICE_MODEL=" not in content
     assert "RADAR_AGENT_HEARTBEAT_INTERVAL_SECONDS=10" in content
+
+
+def test_legacy_config_infers_uat_environment(tmp_path) -> None:
+    config_path = tmp_path / ".env"
+    config_path.write_text(
+        "RADAR_AGENT_BASE_URL=https://radar.vnpaytest.vn/\n",
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path)
+
+    assert settings.environment == "uat"
+    assert settings.base_url == "https://radar.vnpaytest.vn"
 
 
 @pytest.mark.skipif(os.name != "nt", reason="DPAPI is Windows-only")
