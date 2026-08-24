@@ -22,6 +22,7 @@ flowchart LR
     Web --> Backend["RADAR Backend"]
     Agent["Scanner Agent<br/>Windows Service"] -->|"HTTPS 443 chiều đi"| Backend
     Agent -->|"Client Credentials"| SSO["VNPAY SSO"]
+    Agent -->|"lưu tạm bền vững"| Outbox[("SQLite local agent.db<br/>result outbox · DAST checkpoint")]
     Agent -->|"HTTP localhost"| Scanner["APK Scanner API"]
     Scanner -->|"ADB / USB"| Device["Thiết bị Android hoặc emulator"]
     Agent -->|"HTTP localhost"| Dast["DAST Engine API"]
