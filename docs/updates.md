@@ -4,6 +4,7 @@
 
 Scanner Manager gọi GitHub Releases API khi khởi động và khi người dùng chọn **Check again**.
 
+- Bản `0.10.0` hỗ trợ ba loại job DAST độc lập: đồng bộ config, đồng bộ collection và chạy scan. Agent vẫn tương thích Backend cũ trong giai đoạn rollout.
 - Bản `0.9.1` thêm preset Development/UAT/Custom. Chỉ một profile hoạt động tại một thời điểm;
   mỗi RADAR origin dùng SQLite outbox riêng để không gửi nhầm result hoặc DAST checkpoint.
 - Bản `0.8.0` thêm logical DAST worker, đồng bộ config/collection bằng lease, mã hoá API key và

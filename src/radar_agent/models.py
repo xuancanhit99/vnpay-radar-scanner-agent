@@ -8,8 +8,9 @@ class ScannerJob(BaseModel):
     project_id: str | None = None
     agent_id: str | None = None
     engine_type: Literal["apk", "dast"] = "apk"
+    job_type: Literal["scan", "config_sync", "collection_sync"] | None = None
     package_name: str | None = None
-    testcase_id: str
+    testcase_id: str | None = None
     request: str | None = None
     status: str
 

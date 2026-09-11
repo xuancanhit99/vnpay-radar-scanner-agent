@@ -484,7 +484,7 @@ wheels = [
 
 [[package]]
 name = "radar-scanner-agent"
-version = "0.9.1"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "adbutils" },
